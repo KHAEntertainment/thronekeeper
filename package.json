@@ -1,10 +1,11 @@
 {
   "name": "anthropic-proxy",
-  "description": "Universal AI model routing for Claude Code with VS Code extension and secure credential management.",
+  "description": "Universal AI model routing for Claude Code with VS Code extension, CLI, and secure credential management.",
   "version": "1.5.62",
   "type": "module",
   "bin": {
-    "anthropic-proxy": "index.js"
+    "anthropic-proxy": "index.js",
+    "throne": "cli/index.js"
   },
   "scripts": {
     "start": "node index.js",
@@ -33,6 +34,7 @@
   "author": "KHA Entertainment <contact@thehive.ai>",
   "license": "MIT",
   "dependencies": {
+    "commander": "^12.1.0",
     "fastify": "^5.2.1",
     "undici": "^6.22.0",
     "zod": "^4.1.12"
@@ -40,6 +42,6 @@
   "devDependencies": {
     "jsdom": "^27.0.1",
     "supertest": "^7.0.0",
-    "vitest": "^4.0.1"
+    "vitest": "^4.0.18"
   }
 }
