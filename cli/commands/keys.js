@@ -4,7 +4,7 @@
 
 import { Command } from 'commander'
 import secretsClient from '../../lib/secrets-client.js'
-import { getProviderConfig } from '../../lib/provider-env.js'
+import { getProviderConfig, getBuiltInProviderIds } from '../../lib/provider-env.js'
 
 const command = new Command('keys')
   .description('Manage API keys')
@@ -22,8 +22,8 @@ command
       
       const providers = await secretsClient.listProviders()
       
-      // Built-in providers
-      const builtInProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'anthropic']
+      // Built-in providers (from shared source)
+      const builtInProviders = [...getBuiltInProviderIds(), 'anthropic']
       
       console.log('Built-in Providers:')
       for (const id of builtInProviders) {

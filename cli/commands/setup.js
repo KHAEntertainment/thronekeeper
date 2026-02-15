@@ -197,11 +197,11 @@ const command = new Command('setup')
       console.log('\nTo start the proxy, run:')
       console.log(`   throne start\n`)
       
-      rl.close()
-      
     } catch (err) {
       console.error(`\n❌ Setup failed: ${err.message}`)
       process.exit(1)
+    } finally {
+      if (rl) rl.close()
     }
   })
 

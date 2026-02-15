@@ -27,8 +27,8 @@ const command = new Command('start')
       // Check if already running
       if (!options.force) {
         const status = await proxyLifecycle.getStatus(port)
-        if (status.running && status.port === port) {
-          console.log(`❌ Proxy already running on port ${port}`)
+        if (status.running) {
+          console.log(`❌ Proxy already running on port ${status.port || port}`)
           console.log(`   Run 'throne stop' to stop it first, or use --force`)
           process.exit(1)
         }
