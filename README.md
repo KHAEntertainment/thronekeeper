@@ -66,6 +66,24 @@ Notes:
 - Real-Time Model Loading — Browse and search available models
 - Dynamic Model Loading — Deepseek & GLM fetch models via OpenAI-compatible `/models` endpoints
 - Proxy Lifecycle — Start/stop/monitor from the panel
+- **CLI Available** — Headless proxy management via `throne` command
+
+## ⌨️ CLI (Headless Usage)
+
+The `throne` CLI lets you run Thronekeeper without VS Code:
+
+```bash
+npm install                    # Install dependencies
+throne status                  # Check proxy status
+throne config set provider openrouter
+throne keys set openrouter    # Store API key
+throne models list            # Browse available models
+throne start                  # Start proxy daemon
+throne stop                   # Stop daemon
+throne setup                  # Interactive setup wizard
+```
+
+For full CLI reference, see `docs/cli.md`.
 
 ## 📖 Documentation
 
