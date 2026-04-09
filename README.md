@@ -5,8 +5,8 @@
 > **🎉 v1.5.62 — Enable dynamic model fetching for Deepseek/GLM providers!** ✨
 
 <p align="center">
-  <img src="docs/images/thronekeeper-hero.png" alt="Thronekeeper - Universal AI Model Routing" width="800">
-  </p>
+  <img src="https://raw.githubusercontent.com/KHAEntertainment/claude-throne/main/docs/images/thronekeeper-hero.png" alt="Thronekeeper - Universal AI Model Routing" width="800">
+</p>
 
 ## 🚀 Quick Start
 
