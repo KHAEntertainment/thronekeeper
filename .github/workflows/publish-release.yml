@@ -1,0 +1,116 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+        default: 'patch'
+      preid:
+        description: 'Pre-release identifier (for prerelease only)'
+        required: false
+        default: 'alpha'
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # For creating releases
+      id-token: write  # For NPM provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@khaentertainment'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install extension dependencies
+        run: |
+          cd extensions/thronekeeper
+          npm ci
+
+      - name: Run tests
+        run: |
+          npm test
+          cd extensions/thronekeeper
+          npm test
+
+      - name: Bump version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          BUMP="${{ github.event.inputs.bump }}"
+          PREID="${{ github.event.inputs.preid }}"
+
+          if [ "$BUMP" = "prerelease" ]; then
+            PREID=$PREID bash scripts/package-vsix.sh
+          else
+            BUMP=$BUMP bash scripts/package-vsix.sh
+          fi
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
+          PREID: ${{ github.event.inputs.preid }}
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Publish to NPM
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Package VSIX
+        run: |
+          cd extensions/thronekeeper
+          npm run package
+
+      - name: Publish to VS Code Marketplace
+        run: |
+          cd extensions/thronekeeper
+          npx @vscode/vsce publish --pat ${{ secrets.VSCE_TOKEN }}
+        env:
+          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: false
+          files: |
+            extensions/thronekeeper/*.vsix
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version bump
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add package.json package-lock.json extensions/thronekeeper/package.json extensions/thronekeeper/package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git push || echo "Nothing to push"
