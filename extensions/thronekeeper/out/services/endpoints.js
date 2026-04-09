@@ -1,0 +1,94 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isAnthropicEndpoint = isAnthropicEndpoint;
+exports.getModelsEndpointForBase = getModelsEndpointForBase;
+/**
+ * Determines whether a URL corresponds to a known Anthropic-related endpoint.
+ *
+ * @param url - The URL to test; falsy values are treated as non-matching.
+ * @returns `true` if the URL matches any known Anthropic-related patterns, `false` otherwise.
+ */
+function isAnthropicEndpoint(url) {
+    if (!url)
+        return false;
+    try {
+        const u = new URL(url.trim());
+        const host = u.hostname.toLowerCase();
+        const path = u.pathname.toLowerCase();
+        const hasAnthropicPath = path === '/anthropic' ||
+            path.startsWith('/anthropic/') ||
+            path.startsWith('/api/anthropic');
+        // Bedrock: require 'anthropic' in path
+        if (host.includes('bedrock') && host.endsWith('amazonaws.com')) {
+            return /anthropic/.test(path);
+        }
+        // For Deepseek/GLM, require /anthropic path to avoid false positives
+        if (host === 'api.deepseek.com' || host === 'api.z.ai') {
+            return hasAnthropicPath;
+        }
+        // For api.anthropic.com accept either root or /anthropic* paths
+        if (host.endsWith('anthropic.com')) {
+            return true;
+        }
+        // Claude.ai (heuristic; rarely used as API base)
+        if (host.endsWith('claude.ai')) {
+            return true;
+        }
+        // For any other host, check if it has an Anthropic path
+        return hasAnthropicPath;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Produce the models endpoint URL corresponding to a provided base URL.
+ *
+ * Transforms Anthropic-style base URLs into their corresponding models endpoint; for other URLs appends `/models`. An empty `baseUrl` is returned unchanged.
+ *
+ * @param baseUrl - The base URL to convert; returned unchanged if falsy
+ * @returns The models endpoint URL for `baseUrl` (Anthropic-style bases are converted to their models path, others have `/models` appended)
+ */
+function getModelsEndpointForBase(baseUrl) {
+    if (!baseUrl)
+        return baseUrl;
+    try {
+        const url = new URL(baseUrl.replace(/\/$/, ''));
+        const host = url.hostname.toLowerCase();
+        const path = url.pathname.toLowerCase();
+        // Guard against double-normalization: return as-is if it already ends with /models
+        if (path.endsWith('/models')) {
+            return baseUrl.replace(/\/$/, '');
+        }
+        // If it's an Anthropic-style endpoint, transform to use the correct models endpoint.
+        // Example: `https://api.moonshot.ai/anthropic/v1/messages` → `https://api.moonshot.ai/v1/models`
+        // Example: `https://api.minimax.io/anthropic` → `https://api.minimax.io/v1/models`
+        if (isAnthropicEndpoint(baseUrl)) {
+            // Remove /anthropic or /api/anthropic suffix and preserve base path
+            let basePath = '';
+            let modelsPath = '/v1/models';
+            // Extract base path before /anthropic for all Anthropic-style endpoints
+            if (path.includes('/anthropic')) {
+                basePath = path.substring(0, path.indexOf('/anthropic'));
+            }
+            // Special case for api.z.ai - drop basePath to avoid doubling /api prefix
+            if (host === 'api.z.ai') {
+                modelsPath = '/api/paas/v4/models';
+            }
+            else {
+                // For all other Anthropic-style hosts, use preserved base path + /v1/models
+                modelsPath = `${basePath}/v1/models`;
+            }
+            // Normalize double slashes and trailing slashes
+            const finalPath = modelsPath.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+            return `${url.protocol}//${url.host}${finalPath}`;
+        }
+        // For non-Anthropic endpoints, just append /models
+        return `${baseUrl.replace(/\/$/, '')}/models`;
+    }
+    catch {
+        // If URL parsing fails, just append /models
+        return `${baseUrl.replace(/\/$/, '')}/models`;
+    }
+}
+//# sourceMappingURL=endpoints.js.map

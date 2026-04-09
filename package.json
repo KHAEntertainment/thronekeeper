@@ -10,8 +10,8 @@
   "scripts": {
     "start": "node index.js",
     "test": "VITEST_MAX_THREADS=1 VITEST_MIN_THREADS=1 vitest run",
-    "ext:dev": "cd extensions/claude-throne && npm run watch",
-    "webview:build": "cd extensions/claude-throne/webview && npm run build",
+    "ext:dev": "cd extensions/thronekeeper && npm run watch",
+    "webview:build": "cd extensions/thronekeeper/webview && npm run build",
     "secretsd": "cd backends/python/ct_secretsd && python -m ct_secretsd",
     "ext:package": "bash scripts/package-vsix.sh"
   },

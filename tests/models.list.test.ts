@@ -34,7 +34,7 @@ describe('Models.list: normalization and error handling', () => {
       return makeResponse(200, { data: [{ id: 'deepseek-chat' }, { id: 'deepseek-coder' }] })
     })
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     const ids = await listModels('deepseek', 'https://api.deepseek.com/v1', 'KEY')
     expect(ids).toEqual(['deepseek-chat', 'deepseek-coder'])
   })
@@ -46,7 +46,7 @@ describe('Models.list: normalization and error handling', () => {
       return makeResponse(200, { data: [{ id: 'glm-4' }, { id: 'glm-4-plus' }] })
     })
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     const ids = await listModels('glm', 'https://api.z.ai/api/paas/v4', 'KEY')
     expect(ids).toEqual(['glm-4', 'glm-4-plus'])
   })
@@ -54,7 +54,7 @@ describe('Models.list: normalization and error handling', () => {
   it('produces friendly message for Together AI 401/403', async () => {
     mockRequest.mockImplementation(async () => makeResponse(401, { error: { code: '1001', message: 'Authorization Token Missing' } }))
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     const error = await listModels('together', 'https://api.together.xyz/v1', 'INVALID_KEY')
       .catch(err => err)
     expect(error.message).toContain('Together AI authentication failed')
@@ -65,7 +65,7 @@ describe('Models.list: normalization and error handling', () => {
   it('propagates 401/403 with modelsEndpointUrl attached for GLM', async () => {
     mockRequest.mockImplementation(async () => makeResponse(401, { error: { code: '1001', message: 'Authorization Token Missing' } }))
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     await expect(listModels('glm', 'https://api.z.ai/api/paas/v4', ''))
       .rejects.toMatchObject({ modelsEndpointUrl: 'https://api.z.ai/api/paas/v4/models' })
   })
@@ -73,7 +73,7 @@ describe('Models.list: normalization and error handling', () => {
   it('propagates 404 and includes modelsEndpointUrl', async () => {
     mockRequest.mockImplementation(async () => makeResponse(404, { error: 'not found' }))
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     await expect(listModels('deepseek', 'https://api.deepseek.com/v1', 'KEY'))
       .rejects.toMatchObject({ modelsEndpointUrl: 'https://api.deepseek.com/v1/models' })
   })
@@ -88,7 +88,7 @@ describe('Models.list: normalization and error handling', () => {
       }
     })
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     const promise = listModels('glm', 'https://api.z.ai/api/paas/v4', 'KEY')
     await vi.advanceTimersByTimeAsync(1000)
     const ids = await promise
@@ -106,7 +106,7 @@ describe('Models.list: normalization and error handling', () => {
       }
     })
     
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     const promise = listModels('deepseek', 'https://api.deepseek.com/v1', 'KEY')
     // First attempt happens immediately, 502 triggers 1s backoff
     await vi.advanceTimersByTimeAsync(1000)
@@ -121,7 +121,7 @@ describe('Models.list: normalization and error handling', () => {
   // This was a pre-existing issue masked by the test isolation problems.
   it.skip('classifies timeout when request exceeds per-request timeout', async () => {
     vi.useFakeTimers()
-    const { listModels } = await import('../extensions/claude-throne/src/services/Models')
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
     
     mockRequest.mockImplementation(async (url: string, opts: any) => new Promise((_, reject) => {
       opts?.signal?.addEventListener('abort', () => {

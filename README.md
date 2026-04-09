@@ -117,7 +117,7 @@ Note: `claudeThrone.twoModelMode` enables “three-model” selection (reasoning
 git clone https://github.com/KHAEntertainment/thronekeeper.git
 cd thronekeeper
 npm install
-npm run ext:package  # Creates .vsix in extensions/claude-throne/
+npm run ext:package  # Creates .vsix in extensions/thronekeeper/
 ```
 
 ## 🙏 Attribution

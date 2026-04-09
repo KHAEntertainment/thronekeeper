@@ -44,8 +44,8 @@ interface ProviderMap {
 ### Message Schema Location & Versioning
 
 **Schema Files** (Comment 15: Corrected paths):
-- `extensions/claude-throne/src/schemas/messages.ts` - All webview ↔ extension message schemas
-- `extensions/claude-throne/src/schemas/config.ts` - Configuration and provider map schemas
+- `extensions/thronekeeper/src/schemas/messages.ts` - All webview ↔ extension message schemas
+- `extensions/thronekeeper/src/schemas/config.ts` - Configuration and provider map schemas
 
 **Current Schema Version**: 1.0.0 (established 2025-10-28, updated 2025-10-29)
 
@@ -63,7 +63,7 @@ interface ProviderMap {
 
 ### Webview ↔ Extension Message Schema
 ```typescript
-// Location: extensions/claude-throne/src/schemas/messages.ts
+// Location: extensions/thronekeeper/src/schemas/messages.ts
 interface WebviewMessage {
   type: 'modelsLoaded' | 'providerChanged' | 'configSaved' | 'error';
   payload: {
@@ -88,7 +88,7 @@ interface ExtensionMessage {
 
 ### Configuration Payload Schema
 ```typescript
-// Location: extensions/claude-throne/src/schemas/config.ts
+// Location: extensions/thronekeeper/src/schemas/config.ts
 interface ConfigurationPayload {
   provider: string;
   modelSelectionsByProvider: Record<string, ProviderMap>;
@@ -145,9 +145,9 @@ interface ConfigurationPayload {
 ### "If You Touch These Files, You Must..."
 
 **Guarded Files:**
-- `extensions/claude-throne/webview/main.js`
-- `extensions/claude-throne/src/PanelViewProvider.ts`
-- `extensions/claude-throne/src/AnthropicApply.ts`
+- `extensions/thronekeeper/webview/main.js`
+- `extensions/thronekeeper/src/PanelViewProvider.ts`
+- `extensions/thronekeeper/src/AnthropicApply.ts`
 
 **Required Actions:**
 1. Read and understand relevant invariants in Constitution.md
@@ -184,7 +184,7 @@ Add "--debug" to extension development launch args
 code --reset-extension-settings claude-throne
 
 # Clear cached configuration
-rm -rf ~/.vscode/extensions/claude-throne-*/user-data/
+rm -rf ~/.vscode/extensions/thronekeeper-*/user-data/
 
 # Restart VS Code to ensure clean state
 ```

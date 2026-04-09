@@ -8,15 +8,15 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo "Current branch: $BRANCH"
 
 # Extract version from package.json
-VERSION=$(node -p "require('./extensions/claude-throne/package.json').version")
+VERSION=$(node -p "require('./extensions/thronekeeper/package.json').version")
 echo "Detected version: $VERSION"
 
 # Commit version bump if not already committed
-if git diff --quiet extensions/claude-throne/package.json; then
+if git diff --quiet extensions/thronekeeper/package.json; then
     echo "Version bump already committed"
 else
     echo "Committing version bump..."
-    git add extensions/claude-throne/package.json
+    git add extensions/thronekeeper/package.json
     git commit -m "chore: bump version to $VERSION"
 fi
 
@@ -79,9 +79,9 @@ gh release create "v$VERSION" \
 
 ## Files Changed
 - \`src/schemas/messages.ts\` - Schema alignment
-- \`extensions/claude-throne/src/schemas/messages.ts\` - Extension schema updates
-- \`extensions/claude-throne/src/services/Models.ts\` - Timeout budget implementation
-- \`extensions/claude-throne/src/views/PanelViewProvider.ts\` - Sequence token consistency
+- \`extensions/thronekeeper/src/schemas/messages.ts\` - Extension schema updates
+- \`extensions/thronekeeper/src/services/Models.ts\` - Timeout budget implementation
+- \`extensions/thronekeeper/src/views/PanelViewProvider.ts\` - Sequence token consistency
 - \`tests/contract.test.js\` - Updated test expectations" \
     ""
 

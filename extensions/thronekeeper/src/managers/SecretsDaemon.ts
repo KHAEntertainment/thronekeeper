@@ -243,10 +243,11 @@ export class SecretsDaemonManager {
           path.dirname(path.dirname(folder.uri.fsPath))  // Grandparent
         ]
         
-        // If workspace has a variant name (like mighty-morphin-claude), also check for claude-throne
+        // If workspace has a variant name (like mighty-morphin-claude), also check for claude-throne/thronekeeper
         if (workspaceName.includes('claude') || workspaceName.includes('throne')) {
           const parentDir = path.dirname(folder.uri.fsPath)
           searchPaths.push(
+            path.join(parentDir, 'thronekeeper'),
             path.join(parentDir, 'claude-throne'),
             path.join(parentDir, 'mighty-morphin-claude'),
             path.join(parentDir, 'claude-throne-main')
@@ -320,7 +321,8 @@ export class SecretsDaemonManager {
             // Check both the exact project name and common variations
             const projectVariations = [
               BACKEND_PATTERN,  // Standard path
-              path.join('claude-throne', BACKEND_PATTERN),  // Nested in claude-throne
+              path.join('thronekeeper', BACKEND_PATTERN),  // Nested in thronekeeper
+              path.join('claude-throne', BACKEND_PATTERN),  // Nested in claude-throne (legacy)
               path.join('mighty-morphin-claude', BACKEND_PATTERN),  // Alternative name
             ]
             

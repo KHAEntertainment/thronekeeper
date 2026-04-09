@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { validateWebviewMessage } from '../extensions/claude-throne/src/schemas/messages.ts'
+import { validateWebviewMessage } from '../extensions/thronekeeper/src/schemas/messages.ts'
 
 describe('Webview toggle mode message schema', () => {
   it('accepts canonical toggleThreeModelMode message', () => {
