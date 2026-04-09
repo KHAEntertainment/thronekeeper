@@ -1,12 +1,23 @@
 {
-  "name": "anthropic-proxy",
+  "name": "@khaentertainment/thronekeeper",
   "description": "Universal AI model routing for Claude Code with VS Code extension, CLI, and secure credential management.",
   "version": "1.5.62",
   "type": "module",
   "bin": {
-    "anthropic-proxy": "index.js",
     "throne": "cli/index.js"
   },
+  "files": [
+    "index.js",
+    "cli/",
+    "lib/",
+    "key-resolver.js",
+    "transform.js",
+    "xml-tool-formatter.js",
+    "xml-tool-parser.js",
+    "models-capabilities.json",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node index.js",
     "test": "VITEST_MAX_THREADS=1 VITEST_MIN_THREADS=1 vitest run",
