@@ -3,7 +3,7 @@
   "displayName": "Thronekeeper",
   "publisher": "thehive",
   "description": "Configure and run Thronekeeper proxy with secure credential storage and model routing.",
-  "version": "1.5.62",
+  "version": "1.5.63",
   "icon": "images/thronekeeper-logo.jpg",
   "license": "MIT",
   "repository": {
@@ -249,6 +249,16 @@
               "global"
             ],
             "markdownDescription": "Scope at which to apply settings changes (workspace or global)."
+          }
+        }
+      },
+      {
+        "title": "Thronekeeper — Feature Flags",
+        "properties": {
+          "claudeThrone.featureFlags": {
+            "type": "object",
+            "default": {},
+            "markdownDescription": "Feature flags to enable experimental or optional features. Managed through the Thronekeeper panel. Do not edit manually."
           }
         }
       },
