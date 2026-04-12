@@ -481,6 +481,12 @@ export const SimpleUpdateMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('updateEndpointKind'),
     baseUrl: z.string(),
     endpointKind: z.enum(['auto', 'openai', 'anthropic'])
+  }),
+  z.object({
+    // KHA-269: Feature flag update message
+    type: z.literal('updateFeatureFlag'),
+    flag: z.enum(['enableAgentTeams']),
+    value: z.boolean()
   })
 ])
 

@@ -396,6 +396,7 @@ function activate(context) {
                 // Remove Claude Code environment variables when reverting
                 restoreEnv.API_TIMEOUT_MS = null;
                 restoreEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = null;
+                restoreEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = null;
                 // Single call: atomic update
                 await (0, ClaudeSettings_1.updateClaudeSettings)(settingsDir, restoreEnv, /*revert*/ false);
             }
@@ -702,6 +703,15 @@ function activate(context) {
             env.ANTHROPIC_DEFAULT_OPUS_MODEL = null;
             env.ANTHROPIC_DEFAULT_SONNET_MODEL = null;
             env.ANTHROPIC_DEFAULT_HAIKU_MODEL = null;
+        }
+        // KHA-269: Agent Teams feature (Claude Agent Teams is the evolution of sub-agents)
+        const featureFlags = cfg.get('featureFlags', {});
+        if (featureFlags.enableAgentTeams === true) {
+            env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
+            log.appendLine('[applyToClaudeCode] Agent Teams enabled via feature flag');
+        }
+        else {
+            env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = null;
         }
         log.appendLine(`[applyToClaudeCode] Env vars to write: ${JSON.stringify(Object.keys(env))}`);
         log.appendLine(`[applyToClaudeCode] Will write models to settings.json: ${!!reasoningModel}`);

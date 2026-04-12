@@ -393,6 +393,12 @@ exports.SimpleUpdateMessageSchema = zod_1.z.discriminatedUnion('type', [
         type: zod_1.z.literal('updateEndpointKind'),
         baseUrl: zod_1.z.string(),
         endpointKind: zod_1.z.enum(['auto', 'openai', 'anthropic'])
+    }),
+    zod_1.z.object({
+        // KHA-269: Feature flag update message
+        type: zod_1.z.literal('updateFeatureFlag'),
+        flag: zod_1.z.enum(['enableAgentTeams']),
+        value: zod_1.z.boolean()
     })
 ]);
 /**

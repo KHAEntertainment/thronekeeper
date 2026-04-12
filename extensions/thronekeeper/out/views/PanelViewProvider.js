@@ -379,6 +379,9 @@ class PanelViewProvider {
                     case 'updateDebug':
                         await this.handleUpdateDebug(msg.enabled);
                         break;
+                    case 'updateFeatureFlag':
+                        await this.handleUpdateFeatureFlag(msg.flag, msg.value);
+                        break;
                     default:
                         this.log.appendLine(`Unknown message type received: ${msg.type}`);
                 }
@@ -505,7 +508,8 @@ class PanelViewProvider {
             enableSchemaValidation: true,
             enableTokenValidation: true,
             enableKeyNormalization: true,
-            enablePreApplyHydration: true
+            enablePreApplyHydration: true,
+            enableAgentTeams: false
         });
         this.post({
             type: 'config',
@@ -1759,6 +1763,26 @@ class PanelViewProvider {
         await cfg.update('proxy.debug', enabled, target);
         this.log.appendLine(`[handleUpdateDebug] Debug setting updated successfully`);
     }
+    async handleUpdateFeatureFlag(flag, value) {
+        this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} = ${value}`);
+        const cfg = vscode.workspace.getConfiguration('claudeThrone');
+        const applyScope = cfg.get('applyScope', 'workspace');
+        const target = this.getConfigurationTarget(applyScope);
+        // Get existing feature flags or use defaults
+        const existingFlags = cfg.get('featureFlags', {}) || {};
+        const updatedFlags = { ...existingFlags, [flag]: value };
+        await cfg.update('featureFlags', updatedFlags, target);
+        // KHA-269: Re-apply Agent Teams env var immediately when the flag changes
+        if (flag === 'enableAgentTeams') {
+            const isRunning = this.proxy?.getStatus()?.running === true;
+            const autoApply = cfg.get('autoApply', true);
+            if (isRunning && autoApply) {
+                this.log.appendLine(`[handleUpdateFeatureFlag] Proxy running with autoApply - re-applying config`);
+                await vscode.commands.executeCommand('claudeThrone.applyToClaudeCode');
+            }
+        }
+        this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} updated to ${value}`);
+    }
     getHtml() {
         const nonce = String(Math.random()).slice(2);
         const cssUri = this.view.webview.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, 'webview', 'main.css'));
@@ -1897,6 +1921,15 @@ class PanelViewProvider {
               <div class="security-note">🔒 Stored securely in your system keychain</div>
               <div id="anthropicCacheContainer" class="form-group" style="display: none;"></div>
               <button class="btn-add-custom-provider" id="addCustomProviderBtn" type="button" style="display: none;">+ Add Custom Provider</button>
+            </div>
+            <div class="form-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="agentTeamsCheckbox">
+                <span style="font-size: 12px;">Enable Agent Teams</span>
+              </label>
+              <p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
+                Enable Claude Agent Teams for multi-agent swarm collaboration
+              </p>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
