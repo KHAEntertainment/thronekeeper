@@ -1,0 +1,153 @@
+{
+  "state": "idle",
+  "runner": "claude",
+  "executionMode": "coding-agent-primary",
+  "currentActor": "claude",
+  "pollIntervalSeconds": 300,
+  "maxConcurrent": 2,
+  "startedAt": "2026-04-09T15:59:26.573979-07:00",
+  "lastTickStartedAt": "2026-04-10T23:13:45.675026-07:00",
+  "lastTickCompletedAt": "2026-04-10T23:13:47.816696-07:00",
+  "lastTickDurationMs": 2141,
+  "lastTickActionCount": 3,
+  "lastTickFailureCount": 1,
+  "tickCount": 344,
+  "watches": [
+    {
+      "name": "staleness",
+      "enabled": true,
+      "action": "auto-sync",
+      "threshold": "7d"
+    },
+    {
+      "name": "lint",
+      "enabled": true,
+      "action": "log-only"
+    },
+    {
+      "name": "ingest",
+      "enabled": true,
+      "action": "auto-ingest"
+    },
+    {
+      "name": "debt",
+      "enabled": true,
+      "action": "log-only",
+      "threshold": "10"
+    }
+  ],
+  "recentActions": [
+    {
+      "at": "2026-04-10T23:13:47.816696-07:00",
+      "watch": "staleness",
+      "action": "queue",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T23:13:47.816696-07:00",
+      "watch": "lint",
+      "action": "log-only",
+      "target": "78 errors, 70 warnings",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T23:13:47.816696-07:00",
+      "watch": "repo-drift",
+      "action": "execute",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": false,
+      "error": "workspace: git worktree add: exit status 128: Preparing worktree (new branch 'plexium/wt-drift-1775888026829')\nerror: unable to write file docs/images/panel.png\nerror: unable to write file extensions/thronekeeper/bundled/proxy/index.cjs\nerror: unable to write file extensions/thronekeeper/tests/PanelViewProvider.test.ts\nerror: unable to create file extensions/thronekeeper/tests/integration.test.ts: No space left on device\nerror: unable to create file extensions/thronekeeper/tests/settings-reflection.test.ts: No space left on device\nerror: unable to create file extensions/thronekeeper/tests/setup.ts: No space left on device\nerror: unable to create file extensions/thronekeeper/tests/webview-syntax.test.ts: No space left on device\nerror: unable to create file extensions/thronekeeper/thronekeeper-1.5.62.vsix: No space left on device\nerror: unable to create file extensions/thronekeeper/tsconfig.json: No space left on device\nerror: unable to create file extensions/thronekeeper/vitest.integration.config.ts: No space left on device\nfatal: cannot create directory at 'extensions/thronekeeper/webview': No space left on device\n"
+    },
+    {
+      "at": "2026-04-10T23:03:47.959261-07:00",
+      "watch": "staleness",
+      "action": "queue",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T23:03:47.959261-07:00",
+      "watch": "lint",
+      "action": "log-only",
+      "target": "78 errors, 70 warnings",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T23:03:47.959261-07:00",
+      "watch": "repo-drift",
+      "action": "execute",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": false,
+      "error": "workspace: git worktree add: exit status 128: Preparing worktree (new branch 'plexium/wt-drift-1775887426645')\nerror: unable to write file docs/images/panel.png\nerror: unable to write file extensions/thronekeeper/bundled/proxy/index.cjs\nerror: unable to write file extensions/thronekeeper/thronekeeper-1.5.62.vsix\nerror: unable to create file key-resolver.js: No space left on device\nfatal: cannot create directory at 'lib': No space left on device\n"
+    },
+    {
+      "at": "2026-04-10T22:53:49.080315-07:00",
+      "watch": "staleness",
+      "action": "queue",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T22:53:49.080315-07:00",
+      "watch": "lint",
+      "action": "log-only",
+      "target": "78 errors, 70 warnings",
+      "success": true
+    },
+    {
+      "at": "2026-04-10T22:53:49.080315-07:00",
+      "watch": "repo-drift",
+      "action": "execute",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": false,
+      "error": "workspace: git worktree add: exit status 128: Preparing worktree (new branch 'plexium/wt-drift-1775886826708')\nerror: unable to write file opencodetmp/opencode\nerror: unable to write file opencodetmp/opencode-darwin-arm64.zip\nUpdating files:  74% (148/198)\rUpdating files:  75% (149/198)\rUpdating files:  76% (151/198)\rUpdating files:  77% (153/198)\rUpdating files:  78% (155/198)\rUpdating files:  79% (157/198)\rUpdating files:  80% (159/198)\rUpdating files:  81% (161/198)\rUpdating files:  82% (163/198)\rUpdating files:  83% (165/198)\rUpdating files:  84% (167/198)\rUpdating files:  85% (169/198)\rUpdating files:  86% (171/198)\rUpdating files:  87% (173/198)\rUpdating files:  88% (175/198)\rUpdating files:  89% (177/198)\rUpdating files:  90% (179/198)\rUpdating files:  91% (181/198)\rUpdating files:  92% (183/198)\rUpdating files:  93% (185/198)\rUpdating files:  94% (187/198)\rUpdating files:  95% (189/198)\rUpdating files:  96% (191/198)\rUpdating files:  97% (193/198)\rUpdating files:  98% (195/198)\rUpdating files:  99% (197/198)\rUpdating files: 100% (198/198)\rUpdating files: 100% (198/198), done.\nfatal: Could not reset index file to revision 'HEAD'.\n"
+    },
+    {
+      "at": "2026-04-10T22:48:47.744107-07:00",
+      "watch": "staleness",
+      "action": "queue",
+      "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+      "success": true
+    }
+  ],
+  "jobCounts": {
+    "queued": 0,
+    "running": 0,
+    "completed": 0,
+    "failed": 170,
+    "attentionNeeded": 137
+  },
+  "lastCompletedJob": {
+    "id": "drift-1775880526142",
+    "type": "repo-drift",
+    "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+    "phase": "applying",
+    "state": "attention_needed",
+    "workspacePath": "/Users/bbrenner/Documents/Scripting Projects/claude-throne/.plexium/workspaces/wt-drift-1775880526142",
+    "primaryActor": "claude",
+    "summary": "claude executed wiki upkeep job",
+    "applyOutcome": "left in workspace for review (.plexium/ outside allowed apply scope)",
+    "changedFiles": [
+      ".plexium/",
+      ".wiki/",
+      "meta.json"
+    ],
+    "startedAt": "2026-04-10T21:08:47.704325-07:00",
+    "completedAt": "2026-04-10T21:15:26.319692-07:00",
+    "retryAt": "0001-01-01T00:00:00Z"
+  },
+  "lastFailure": {
+    "id": "drift-1775885926518",
+    "type": "repo-drift",
+    "target": "guides/WARP.md, (new source) .archive/docs/Claude-Throne-Prompt.md, (new source) .github/PULL_REQUEST_TEMPLATE.md",
+    "phase": "documenting",
+    "state": "failed",
+    "workspacePath": "/Users/bbrenner/Documents/Scripting Projects/claude-throne/.plexium/workspaces/wt-drift-1775885926518",
+    "primaryActor": "claude",
+    "startedAt": "2026-04-10T22:38:49.977214-07:00",
+    "completedAt": "2026-04-10T22:38:50.074457-07:00",
+    "retryAt": "0001-01-01T00:00:00Z",
+    "error": "exec: \"claude\": executable file not found in $PATH"
+  }
+}
