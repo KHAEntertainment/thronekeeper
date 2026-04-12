@@ -383,6 +383,30 @@ class ProxyManager {
                 this.log.appendLine(`[ProxyManager] GLM key found: ZAI_API_KEY and GLM_API_KEY set`);
                 break;
             }
+            case 'kimi': {
+                const key = await this.secrets.getProviderKey('kimi');
+                if (!key) {
+                    const errorMsg = 'Kimi Coding Plan API key not set. Run: Claude Throne: Store Kimi API Key';
+                    this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+                base.ANTHROPIC_API_KEY = key;
+                setBaseUrl('https://api.kimi.com/coding');
+                this.log.appendLine(`[ProxyManager] Kimi Coding Plan key found: ANTHROPIC_API_KEY set`);
+                break;
+            }
+            case 'minimax': {
+                const key = await this.secrets.getProviderKey('minimax');
+                if (!key) {
+                    const errorMsg = 'Minimax API key not set. Run: Claude Throne: Store Minimax API Key';
+                    this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+                base.ANTHROPIC_AUTH_TOKEN = key;
+                setBaseUrl('https://api.minimax.io/anthropic');
+                this.log.appendLine(`[ProxyManager] Minimax key found: ANTHROPIC_AUTH_TOKEN set`);
+                break;
+            }
             case 'custom': {
                 const baseUrl = (opts.customBaseUrl || '').trim();
                 if (!baseUrl)

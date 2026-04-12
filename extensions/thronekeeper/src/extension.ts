@@ -559,6 +559,12 @@ export function activate(context: vscode.ExtensionContext) {
   const storeGlmKey = vscode.commands.registerCommand('claudeThrone.storeGlmKey', async () => {
     await storeKey('glm', secrets)
   })
+  const storeKimiKey = vscode.commands.registerCommand('claudeThrone.storeKimiKey', async () => {
+    await storeKey('kimi', secrets)
+  })
+  const storeMinimaxKey = vscode.commands.registerCommand('claudeThrone.storeMinimaxKey', async () => {
+    await storeKey('minimax', secrets)
+  })
   const storeCustomKey = vscode.commands.registerCommand('claudeThrone.storeCustomKey', async () => {
     await storeKey('custom', secrets)
   })
@@ -569,6 +575,8 @@ export function activate(context: vscode.ExtensionContext) {
       { label: 'Together', id: 'together' },
       { label: 'Deepseek', id: 'deepseek' },
       { label: 'GLM', id: 'glm' },
+      { label: 'Kimi', id: 'kimi' },
+      { label: 'Minimax', id: 'minimax' },
       { label: 'Custom', id: 'custom' },
     ], { title: 'Choose Provider', canPickMany: false })
     if (!pick) return
@@ -627,7 +635,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       const startTime = Date.now()
       const cfg = vscode.workspace.getConfiguration('claudeThrone')
-      const provider = cfg.get<'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'custom'>('provider', 'openrouter')
+      const provider = cfg.get<'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'kimi' | 'minimax' | 'custom'>('provider', 'openrouter')
       const customBaseUrl = cfg.get<string>('customBaseUrl', '')
       const port = cfg.get<number>('proxy.port', 3000)
       const debug = cfg.get<boolean>('proxy.debug', false)
@@ -1220,7 +1228,7 @@ async function tryOpenView(viewId: string): Promise<boolean> {
   }
 }
 
-type Provider = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'custom'
+type Provider = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'kimi' | 'minimax' | 'custom'
 
 /**
  * Prompt the user for an Anthropic API key, store it securely, and attempt to refresh and cache the latest Anthropic model defaults.
@@ -1322,6 +1330,8 @@ async function storeKey(provider: Provider, secrets: SecretsService) {
     together: 'Together API Key',
     deepseek: 'Deepseek API Key',
     glm: 'GLM API Key',
+    kimi: 'Kimi Coding Plan API Key',
+    minimax: 'Minimax API Key',
     custom: 'Custom Provider API Key',
   }
   const key = await vscode.window.showInputBox({
