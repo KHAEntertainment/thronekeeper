@@ -405,25 +405,19 @@
       apiPrefix: ''
         },
         glm: {
-      name: 'GLM (Z.AI)',
+      name: 'GLM Coding Plan (z.ai)',
             description: 'Anthropic-compatible API with GLM models',
       helpUrl: 'https://open.bigmodel.cn/',
       apiPrefix: ''
         },
-        moonshot: {
-            name: 'Moonshot (Kimi)',
-            description: 'Moonshot AI with Kimi models',
-      helpUrl: 'https://www.moonshot.cn/',
-      apiPrefix: ''
-        },
         minimax: {
-            name: 'MiniMax',
+            name: 'Minimax Coding Plan',
             description: 'MiniMax AI with chat and completion models',
       helpUrl: 'https://www.minimax.io/',
       apiPrefix: ''
         },
         kimi: {
-            name: 'Kimi (Moonshot)',
+            name: 'Kimi Coding Plan (Moonshot AI)',
             description: 'Kimi AI for coding and reasoning',
       helpUrl: 'https://kimi.com/',
       apiPrefix: ''
@@ -1207,7 +1201,7 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     
     // Check for conflicts with built-in providers
-    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'];
+    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'minimax', 'kimi', 'custom'];
     if (builtinProviders.includes(id)) {
       showNotification('Provider ID conflicts with built-in provider. Please choose a different name.', 'error');
       return;
@@ -1497,7 +1491,7 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     
     // Check for conflicts with built-in providers
-    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'];
+    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'minimax', 'kimi', 'custom'];
     if (builtinProviders.includes(id)) {
       showNotification('Provider ID conflicts with built-in provider. Please choose a different name.', 'error');
       return;
@@ -2753,7 +2747,7 @@
     if (config.modelSelectionsByProvider) {
       state.modelsByProvider = config.modelSelectionsByProvider;
       // Ensure built-in providers have entries (normalized to canonical keys)
-      ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'].forEach(provider => {
+      ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'minimax', 'kimi', 'custom'].forEach(provider => {
         if (!state.modelsByProvider[provider]) {
           state.modelsByProvider[provider] = { reasoning: '', completion: '', value: '' };
         } else {
