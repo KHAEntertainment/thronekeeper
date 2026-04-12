@@ -105,6 +105,30 @@ const FALLBACK_XML_MODELS = [
   'deepseek-v3',
 ]
 
+// Grok multi-agent constants
+const GROK_AGENT_COUNTS = { low: 4, high: 16 }
+const HIGH_THINKING_PHRASES = [
+  '16 agent swarm',
+  'high thinking',
+  '16 agents',
+  'swarm',
+  'multi-agent',
+  'agent swarm',
+  '16-agent',
+]
+
+/**
+ * Detect high-thinking mode from prompt content.
+ * Used when payload.thinking is not explicitly set.
+ * @param {string} content - The prompt/messages content to analyze
+ * @returns {boolean} true if high-thinking mode should be activated
+ */
+function detectHighThinking(content) {
+  if (!content) return false
+  const lowerContent = content.toLowerCase()
+  return HIGH_THINKING_PHRASES.some(phrase => lowerContent.includes(phrase.toLowerCase()))
+}
+
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function matchesPattern(modelName, pattern) {
@@ -1075,7 +1099,36 @@ fastify.post('/v1/messages', async (request, reply) => {
       openaiPayload.messages = messagesWithXML
       console.log(`[Tool Capability] Injected text-based tool instructions for ${selectedModel}`)
     }
-    
+
+    // Add extra_body.agent_count for Grok multi-agent mode
+    if (provider === 'grok') {
+      // Determine if multi-agent mode should be activated
+      // Priority: explicit payload.thinking > auto-detect from prompt > default low (4)
+      let agentCount = GROK_AGENT_COUNTS.low // Default to low
+
+      if (payload.thinking === true) {
+        agentCount = GROK_AGENT_COUNTS.high
+      } else if (payload.thinking === false) {
+        agentCount = GROK_AGENT_COUNTS.low
+      } else {
+        // Auto-detect: check prompt content for high-thinking phrases
+        const allContent = messagesWithXML.map(m => m.content || '').join(' ')
+        if (detectHighThinking(allContent)) {
+          agentCount = GROK_AGENT_COUNTS.high
+          console.log('[Grok Multi-Agent] Auto-detected high-thinking mode from prompt content')
+        }
+      }
+
+      if (agentCount === GROK_AGENT_COUNTS.high || payload.thinking === true) {
+        console.log(`[Grok Multi-Agent] Activating ${agentCount}-agent swarm mode`)
+      }
+
+      openaiPayload.extra_body = {
+        ...(openaiPayload.extra_body || {}),
+        agent_count: agentCount,
+      }
+    }
+
     debug('OpenAI payload:', openaiPayload)
 
     // Tool mode logging and detection
