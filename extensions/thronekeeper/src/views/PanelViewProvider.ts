@@ -1949,6 +1949,17 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleUpdateFeatureFlag(flag: string, value: boolean) {
+    // Block prototype pollution attacks and restrict to known flags
+    if (!flag || typeof flag !== 'string' || ['__proto__', 'constructor', 'prototype'].includes(flag)) {
+      this.log.appendLine(`[handleUpdateFeatureFlag] Rejected invalid flag name: ${flag}`)
+      return
+    }
+    const KNOWN_FLAGS = ['enableAgentTeams']
+    if (!KNOWN_FLAGS.includes(flag)) {
+      this.log.appendLine(`[handleUpdateFeatureFlag] Unknown flag: ${flag}`)
+      return
+    }
+
     this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} = ${value}`)
 
     const cfg = vscode.workspace.getConfiguration('claudeThrone')

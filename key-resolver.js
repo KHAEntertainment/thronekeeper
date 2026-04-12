@@ -46,7 +46,7 @@ const ANTHROPIC_LIKE_PATTERNS = [
   { host: 'z.ai', path: 'anthropic' },
   { host: 'moonshot.cn', path: 'anthropic' }, // Comment 4: Known Anthropic-like provider
   { host: 'minimax.chat', path: 'anthropic' }, // Comment 4: Known Anthropic-like provider
-  { host: 'kimi.com', path: 'anthropic' }, // Comment 4: Kimi Code
+  { host: 'kimi.com' }, // Comment 4: Kimi Code uses /coding/ path, match on host alone
   { path: '/anthropic' }, // Generic path pattern
 ]
 
