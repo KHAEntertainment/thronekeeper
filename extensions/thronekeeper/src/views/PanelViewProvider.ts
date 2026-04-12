@@ -441,7 +441,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       const customProviders = cfg.get<any[]>('customProviders', [])
 
       // Start with built-in providers
-      const providerIds = ['openrouter','openai','together','deepseek','glm']
+      const providerIds = ['openrouter','openai','together','deepseek','glm','kimi','minimax']
       
       // Add all saved custom providers by ID
       for (const cp of customProviders) {
@@ -1013,7 +1013,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       }
       
       // Check for conflicts with built-in providers
-      const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom']
+      const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom', 'kimi', 'minimax']
       if (builtinProviders.includes(id.trim())) {
         vscode.window.showErrorMessage('Provider ID conflicts with built-in provider. Please choose a different name.')
         return
@@ -1208,7 +1208,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     // Custom providers: preserve their exact casing as stored
     const trimmedProvider = provider.trim()
     const lowercased = trimmedProvider.toLowerCase()
-    const validBuiltIns = ['openrouter', 'openai', 'together', 'deepseek', 'glm']
+    const validBuiltIns = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'kimi', 'minimax']
     
     // For built-ins, use lowercase; for custom providers, preserve casing
     const normalizedProvider = validBuiltIns.includes(lowercased) ? lowercased : trimmedProvider
