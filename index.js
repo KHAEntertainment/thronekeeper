@@ -17,20 +17,7 @@ import { normalizeContent, removeUriFormat } from './transform.js'
 import { injectXMLToolInstructions } from './xml-tool-formatter.js'
 import { parseAssistantMessage } from './xml-tool-parser.js'
 import { redactSecrets } from './utils/redaction.js'
-
-// PGP block stripping for Grok multi-agent responses
-const PGP_BLOCK_PATTERN = /-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/g
-
-/**
- * Strip PGP armored blocks from text content.
- * Used for Grok multi-agent responses that include encrypted sub-agent state.
- * @param {string} text - Text that may contain PGP blocks
- * @returns {string} - Clean text with PGP blocks removed
- */
-function stripPgpBlocks(text) {
-  if (!text || typeof text !== 'string') return text
-  return text.replace(PGP_BLOCK_PATTERN, '').trim()
-}
+import { PGP_BLOCK_PATTERN, stripPgpBlocks, GROK_AGENT_COUNTS, HIGH_THINKING_PHRASES, detectHighThinking } from './utils/grok-multiagent.js'
 
 let packageVersion = '0.0.0'
 let packageDir = null
@@ -118,30 +105,6 @@ const FALLBACK_XML_MODELS = [
   'deepseek-v2',
   'deepseek-v3',
 ]
-
-// Grok multi-agent constants
-const GROK_AGENT_COUNTS = { low: 4, high: 16 }
-const HIGH_THINKING_PHRASES = [
-  '16 agent swarm',
-  'high thinking',
-  '16 agents',
-  'swarm',
-  'multi-agent',
-  'agent swarm',
-  '16-agent',
-]
-
-/**
- * Detect high-thinking mode from prompt content.
- * Used when payload.thinking is not explicitly set.
- * @param {string} content - The prompt/messages content to analyze
- * @returns {boolean} true if high-thinking mode should be activated
- */
-function detectHighThinking(content) {
-  if (!content) return false
-  const lowerContent = content.toLowerCase()
-  return HIGH_THINKING_PHRASES.some(phrase => lowerContent.includes(phrase.toLowerCase()))
-}
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
