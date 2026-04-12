@@ -410,6 +410,24 @@
       helpUrl: 'https://open.bigmodel.cn/',
       apiPrefix: ''
         },
+        moonshot: {
+            name: 'Moonshot (Kimi)',
+            description: 'Moonshot AI with Kimi models',
+      helpUrl: 'https://www.moonshot.cn/',
+      apiPrefix: ''
+        },
+        minimax: {
+            name: 'MiniMax',
+            description: 'MiniMax AI with chat and completion models',
+      helpUrl: 'https://www.minimax.io/',
+      apiPrefix: ''
+        },
+        kimi: {
+            name: 'Kimi (Moonshot)',
+            description: 'Kimi AI for coding and reasoning',
+      helpUrl: 'https://kimi.com/',
+      apiPrefix: ''
+        },
         custom: {
             name: 'Custom Provider',
             description: 'Use any OpenAI-compatible endpoint',
@@ -1189,7 +1207,7 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     
     // Check for conflicts with built-in providers
-    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom'];
+    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'];
     if (builtinProviders.includes(id)) {
       showNotification('Provider ID conflicts with built-in provider. Please choose a different name.', 'error');
       return;
@@ -1479,7 +1497,7 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     
     // Check for conflicts with built-in providers
-    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom'];
+    const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'];
     if (builtinProviders.includes(id)) {
       showNotification('Provider ID conflicts with built-in provider. Please choose a different name.', 'error');
       return;
@@ -2142,21 +2160,16 @@
       return;
     }
 
-    // Comment 3: Make shallow copy before filtering/sorting to avoid mutating state.models
+    // Comment 3: Make shallow copy before filtering to avoid mutating state.models
     let filtered = [...state.models];
     if (searchTerm) {
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.name.toLowerCase().includes(searchTerm) ||
         m.id.toLowerCase().includes(searchTerm)
       );
     }
 
-    // Sort filtered models to move selected models to the top
-    filtered.sort((a, b) => {
-      const aSelected = (a.id === state.reasoningModel || a.id === state.codingModel || a.id === state.valueModel) ? 1 : 0;
-      const bSelected = (b.id === state.reasoningModel || b.id === state.codingModel || b.id === state.valueModel) ? 1 : 0;
-      return bSelected - aSelected;
-    });
+    // Note: Models are displayed in API order, selected models are highlighted via CSS class
 
     if (filtered.length === 0) {
       container.innerHTML = '<div class="empty-state">No models match your search</div>';
@@ -2740,7 +2753,7 @@
     if (config.modelSelectionsByProvider) {
       state.modelsByProvider = config.modelSelectionsByProvider;
       // Ensure built-in providers have entries (normalized to canonical keys)
-      ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom'].forEach(provider => {
+      ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'moonshot', 'minimax', 'kimi', 'custom'].forEach(provider => {
         if (!state.modelsByProvider[provider]) {
           state.modelsByProvider[provider] = { reasoning: '', completion: '', value: '' };
         } else {
