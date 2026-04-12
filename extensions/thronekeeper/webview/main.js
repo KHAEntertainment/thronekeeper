@@ -536,10 +536,13 @@
     // Agent Teams Checkbox (KHA-269)
     const agentTeamsCheckbox = document.getElementById('agentTeamsCheckbox');
     agentTeamsCheckbox?.addEventListener('change', (e) => {
+      const enabled = !!e.target.checked;
+      state.featureFlags.enableAgentTeams = enabled;
+
       vscode.postMessage({
         type: 'updateFeatureFlag',
         flag: 'enableAgentTeams',
-        value: e.target.checked
+        value: enabled
       });
     });
 
