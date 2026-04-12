@@ -430,7 +430,7 @@ class PanelViewProvider {
             const cfg = vscode.workspace.getConfiguration('claudeThrone');
             const customProviders = cfg.get('customProviders', []);
             // Start with built-in providers
-            const providerIds = ['openrouter', 'openai', 'together', 'deepseek', 'glm'];
+            const providerIds = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'kimi', 'minimax'];
             // Add all saved custom providers by ID
             for (const cp of customProviders) {
                 if (cp?.id && cp.id.trim()) {
@@ -955,7 +955,7 @@ class PanelViewProvider {
                 return;
             }
             // Check for conflicts with built-in providers
-            const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom'];
+            const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'kimi', 'minimax', 'custom'];
             if (builtinProviders.includes(id.trim())) {
                 vscode.window.showErrorMessage('Provider ID conflicts with built-in provider. Please choose a different name.');
                 return;
@@ -1127,7 +1127,7 @@ class PanelViewProvider {
         // Custom providers: preserve their exact casing as stored
         const trimmedProvider = provider.trim();
         const lowercased = trimmedProvider.toLowerCase();
-        const validBuiltIns = ['openrouter', 'openai', 'together', 'deepseek', 'glm'];
+        const validBuiltIns = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'kimi', 'minimax'];
         // For built-ins, use lowercase; for custom providers, preserve casing
         const normalizedProvider = validBuiltIns.includes(lowercased) ? lowercased : trimmedProvider;
         // Verify provider ID matches expected format
@@ -1764,12 +1764,29 @@ class PanelViewProvider {
         this.log.appendLine(`[handleUpdateDebug] Debug setting updated successfully`);
     }
     async handleUpdateFeatureFlag(flag, value) {
+        // Block prototype pollution attacks and restrict to known flags
+        if (!flag || typeof flag !== 'string' || ['__proto__', 'constructor', 'prototype'].includes(flag)) {
+            this.log.appendLine(`[handleUpdateFeatureFlag] Rejected invalid flag name: ${flag}`);
+            return;
+        }
+        if (typeof value !== 'boolean') {
+            this.log.appendLine(`[handleUpdateFeatureFlag] Rejected non-boolean value for ${flag}: ${JSON.stringify(value)}`);
+            return;
+        }
+        const KNOWN_FLAGS = ['enableAgentTeams'];
+        if (!KNOWN_FLAGS.includes(flag)) {
+            this.log.appendLine(`[handleUpdateFeatureFlag] Unknown flag: ${flag}`);
+            return;
+        }
         this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} = ${value}`);
         const cfg = vscode.workspace.getConfiguration('claudeThrone');
         const applyScope = cfg.get('applyScope', 'workspace');
         const target = this.getConfigurationTarget(applyScope);
         // Get existing feature flags or use defaults
-        const existingFlags = cfg.get('featureFlags', {}) || {};
+        const existingFlagsRaw = cfg.get('featureFlags', {});
+        const existingFlags = existingFlagsRaw && typeof existingFlagsRaw === 'object' && !Array.isArray(existingFlagsRaw)
+            ? existingFlagsRaw
+            : {};
         const updatedFlags = { ...existingFlags, [flag]: value };
         await cfg.update('featureFlags', updatedFlags, target);
         // KHA-269: Re-apply Agent Teams env var immediately when the flag changes
@@ -1876,7 +1893,15 @@ class PanelViewProvider {
                 Automatically assigns your selected reasoning model for planning tasks and your completion model for coding/execution
               </div>
             </div>
-            
+
+            <div class="two-model-toggle" style="margin-left: 20px; margin-top: 8px;">
+              <input type="checkbox" id="agentTeamsCheckbox">
+              <label for="agentTeamsCheckbox">Enable Agent Teams</label>
+              <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
+                Enable Claude Agent Teams for multi-agent swarm collaboration
+              </div>
+            </div>
+
             <div id="selectedModelsDisplay" class="selected-models-display" style="margin-top: 12px; font-size: 11px; color: var(--vscode-descriptionForeground);">
               <div id="reasoningModelDisplay" style="margin-bottom: 4px;"></div>
               <div id="codingModelDisplay" style="margin-bottom: 4px;"></div>
@@ -1921,15 +1946,6 @@ class PanelViewProvider {
               <div class="security-note">🔒 Stored securely in your system keychain</div>
               <div id="anthropicCacheContainer" class="form-group" style="display: none;"></div>
               <button class="btn-add-custom-provider" id="addCustomProviderBtn" type="button" style="display: none;">+ Add Custom Provider</button>
-            </div>
-            <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="agentTeamsCheckbox">
-                <span style="font-size: 12px;">Enable Agent Teams</span>
-              </label>
-              <p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
-                Enable Claude Agent Teams for multi-agent swarm collaboration
-              </p>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">

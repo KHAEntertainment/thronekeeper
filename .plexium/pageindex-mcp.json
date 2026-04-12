@@ -1,0 +1,6 @@
+{
+  "server": "plexium-pageindex",
+  "command": "plexium",
+  "args": ["pageindex", "serve"],
+  "transport": "stdio"
+}

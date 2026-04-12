@@ -1,0 +1,137 @@
+version: 1
+repo:
+    defaultBranch: main
+    wikiEnabled: false
+sources:
+    include:
+        - '**/*.go'
+        - '**/*.md'
+        - '**/*.yml'
+        - '**/*.yaml'
+    exclude:
+        - vendor/**
+        - .wiki/**
+        - .plexium/**
+agents:
+    adapters: []
+    strictness: moderate
+wiki:
+    root: .wiki
+    home: Home.md
+    sidebar: _Sidebar.md
+    footer: _Footer.md
+    log: _log.md
+    index: _index.md
+    schema: _schema.md
+taxonomy:
+    sections:
+        - Architecture
+        - Modules
+        - Decisions
+        - Patterns
+        - Concepts
+        - Guides
+    autoClassify: true
+publish:
+    branch: main
+    message: 'docs: update wiki'
+    autoPush: false
+    preserveUnmanagedPages: true
+    managedMarkerComment: true
+sync:
+    mode: incremental
+    autoSync: false
+    onCommit: false
+    onPush: false
+    rewriteHomeOnSync: false
+    rewriteSidebarOnSync: false
+    idempotent: true
+    exclude: []
+enforcement:
+    preCommitHook: false
+    ciCheck: false
+    mementoGate: false
+    strictness: moderate
+    blockOnDebt: false
+    debtThreshold: 0
+integrations:
+    llmProvider: ""
+    memento: false
+    beads: false
+    pageindex: true
+    obsidian: false
+reports:
+    bootstrap:
+        - markdown
+    sync:
+        - markdown
+    lint:
+        - markdown
+    format: markdown
+    outputDir: .plexium/output
+githubWiki:
+    enabled: false
+    submodule: false
+    publish: []
+    exclude: []
+sensitivity:
+    rules: ""
+    neverPublish:
+        - credentials.json
+        - .env
+    maxFileSize: 1048576
+    excludeExtensions: []
+daemon:
+    enabled: true
+    pollInterval: 300
+    maxConcurrent: 2
+    runner: claude
+    runnerModel: ""
+    tracker: none
+    watches:
+        staleness:
+            enabled: true
+            threshold: 7d
+            interval: ""
+            watchDir: ""
+            maxDebt: 0
+            action: auto-sync
+        lint:
+            enabled: true
+            threshold: ""
+            interval: ""
+            watchDir: ""
+            maxDebt: 0
+            action: log-only
+        ingest:
+            enabled: true
+            threshold: ""
+            interval: ""
+            watchDir: .wiki/raw/
+            maxDebt: 0
+            action: auto-ingest
+        debt:
+            enabled: true
+            threshold: ""
+            interval: ""
+            watchDir: ""
+            maxDebt: 10
+            action: log-only
+retry:
+    maxAttempts: 0
+    initialDelayMs: 0
+    backoffMultiplier: 0
+    maxDelayMs: 0
+
+assistiveAgent:
+  enabled: true
+  providers:
+    - name: openrouter
+      enabled: true
+      type: openai-compatible
+      endpoint: https://openrouter.ai/api
+      model: "nvidia/nemotron-3-super-120b-a12b"
+      apiKeyEnv: OPENROUTER_API_KEY
+      capabilityProfile: "balanced"
+  budget:
+    dailyUSD: 0

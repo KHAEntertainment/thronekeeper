@@ -33328,6 +33328,8 @@ var PROVIDERS = {
   glm: "glm",
   anthropic: "anthropic",
   grok: "grok",
+  kimi: "kimi",
+  minimax: "minimax",
   custom: "custom"
 };
 var ENDPOINT_KIND = {
@@ -33347,7 +33349,9 @@ var PROVIDER_KEY_SOURCES = {
   [PROVIDERS.glm]: ["GLM_API_KEY", "ZAI_API_KEY"],
   // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ["ANTHROPIC_API_KEY"],
-  [PROVIDERS.grok]: ["GROK_API_KEY", "XAI_API_KEY"]
+  [PROVIDERS.grok]: ["GROK_API_KEY", "XAI_API_KEY"],
+  [PROVIDERS.kimi]: ["KIMI_API_KEY"],
+  [PROVIDERS.minimax]: ["MINIMAX_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 };
 var ANTHROPIC_LIKE_PATTERNS = [
   { host: "anthropic.com" },
@@ -33358,6 +33362,8 @@ var ANTHROPIC_LIKE_PATTERNS = [
   // Comment 4: Known Anthropic-like provider
   { host: "minimax.chat", path: "anthropic" },
   // Comment 4: Known Anthropic-like provider
+  { host: "kimi.com" },
+  // Comment 4: Kimi Code uses /coding/ path, match on host alone
   { path: "/anthropic" }
   // Generic path pattern
 ];
@@ -33393,6 +33399,8 @@ function detectProvider(baseUrl2, env = process.env) {
     if (host.includes("z.ai")) return PROVIDERS.glm;
     if (host.includes("anthropic.com") || host.includes("anthropic.ai") || host.endsWith(".anthropic.app")) return PROVIDERS.anthropic;
     if (host.includes("x.ai") || host.includes("grok")) return PROVIDERS.grok;
+    if (host === "kimi.com" || host === "api.kimi.com" || host.endsWith(".kimi.com")) return PROVIDERS.kimi;
+    if (host === "minimax.io" || host === "api.minimax.io" || host.endsWith(".minimax.io") || host === "minimax.chat" || host.endsWith(".minimax.chat")) return PROVIDERS.minimax;
     if (/\/anthropic/.test(path2)) return PROVIDERS.anthropic;
     return PROVIDERS.custom;
   } catch {
@@ -33501,7 +33509,7 @@ function inferEndpointKindSync(provider2, baseUrl2, overrides = {}) {
       return ENDPOINT_KIND.OPENAI_COMPATIBLE;
     }
   }
-  if (provider2 === PROVIDERS.deepseek || provider2 === PROVIDERS.glm || provider2 === PROVIDERS.anthropic) {
+  if (provider2 === PROVIDERS.deepseek || provider2 === PROVIDERS.glm || provider2 === PROVIDERS.anthropic || provider2 === PROVIDERS.kimi || provider2 === PROVIDERS.minimax) {
     return ENDPOINT_KIND.ANTHROPIC_NATIVE;
   }
   if (isAnthropicLikeUrl(baseUrl2)) {
@@ -33863,6 +33871,28 @@ function redactSecrets(text) {
       return `${key2}: [REDACTED]`;
     }
   });
+}
+
+// ../../utils/grok-multiagent.js
+var PGP_BLOCK_PATTERN = /-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/g;
+function stripPgpBlocks(text) {
+  if (!text || typeof text !== "string") return text;
+  return text.replace(PGP_BLOCK_PATTERN, "").trim();
+}
+var GROK_AGENT_COUNTS = { low: 4, high: 16 };
+var HIGH_THINKING_PHRASES = [
+  "16 agent swarm",
+  "high thinking",
+  "16 agents",
+  "swarm",
+  "multi-agent",
+  "agent swarm",
+  "16-agent"
+];
+function detectHighThinking(content) {
+  if (!content) return false;
+  const lowerContent = content.toLowerCase();
+  return HIGH_THINKING_PHRASES.some((phrase) => lowerContent.includes(phrase.toLowerCase()));
 }
 
 // ../../index.js
@@ -34721,6 +34751,27 @@ ${toolInstructions}`;
       openaiPayload.messages = messagesWithXML;
       console.log(`[Tool Capability] Injected text-based tool instructions for ${selectedModel}`);
     }
+    if (provider === "grok") {
+      let agentCount = GROK_AGENT_COUNTS.low;
+      if (payload.thinking === true) {
+        agentCount = GROK_AGENT_COUNTS.high;
+      } else if (payload.thinking === false) {
+        agentCount = GROK_AGENT_COUNTS.low;
+      } else {
+        const allContent = messagesWithXML.map((m) => m.content || "").join(" ");
+        if (detectHighThinking(allContent)) {
+          agentCount = GROK_AGENT_COUNTS.high;
+          console.log("[Grok Multi-Agent] Auto-detected high-thinking mode from prompt content");
+        }
+      }
+      if (agentCount === GROK_AGENT_COUNTS.high || payload.thinking === true) {
+        console.log(`[Grok Multi-Agent] Activating ${agentCount}-agent swarm mode`);
+      }
+      openaiPayload.extra_body = {
+        ...openaiPayload.extra_body || {},
+        agent_count: agentCount
+      };
+    }
     debug("OpenAI payload:", openaiPayload);
     if (tools.length > 0) {
       if (needsXMLTools) {
@@ -34848,6 +34899,9 @@ ${toolInstructions}`;
       }
       const choice = data.choices[0];
       const openaiMessage = choice.message;
+      if (provider === "grok" && selectedModel.includes("multi-agent")) {
+        openaiMessage.content = stripPgpBlocks(openaiMessage.content);
+      }
       const stopReason = mapStopReason(choice.finish_reason);
       let contentBlocks = [];
       try {
@@ -34956,6 +35010,9 @@ ${toolInstructions}`;
                   debug("[Streaming] Could not parse buffered data, discarding:", chunkBuffer.substring(0, 100));
                 }
                 chunkBuffer = "";
+              }
+              if (provider === "grok" && selectedModel.includes("multi-agent")) {
+                accumulatedContent = stripPgpBlocks(accumulatedContent);
               }
               const trimmedContent = accumulatedContent.trim();
               const trimmedReasoning = accumulatedReasoning.trim();

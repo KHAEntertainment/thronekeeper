@@ -1,0 +1,315 @@
+{
+  "type": "conversion",
+  "timestamp": "2026-04-10T07:42:52Z",
+  "sources": {
+    "scanned": 9260,
+    "included": 717,
+    "skipped": 8543,
+    "skipReasons": {
+      "binary file": 17,
+      "empty file": 49,
+      "file too large (\u003e1MB)": 26,
+      "no matching include pattern": 8327,
+      "non-UTF8 encoding": 124
+    }
+  },
+  "pages": {
+    "generated": 37,
+    "stubs": 0
+  },
+  "gaps": [
+    {
+      "type": "orphan",
+      "target": "guides/docs.md",
+      "detail": "Page 'guides/docs.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/ct-secretsd.md",
+      "detail": "Page 'guides/ct-secretsd.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/thronekeeper.md",
+      "detail": "Page 'guides/thronekeeper.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/images.md",
+      "detail": "Page 'guides/images.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.12.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.12.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.13.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.13.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.14.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.14.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.15.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.15.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.16.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.16.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.17.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.17.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.18.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.18.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.4.19.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.4.19.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.5.0.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.5.0.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/FIXES-v1.5.11.md",
+      "detail": "Page '.archive/.archive/FIXES-v1.5.11.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": ".archive/.archive/SESSION-SUMMARY-v1.5.0.md",
+      "detail": "Page '.archive/.archive/SESSION-SUMMARY-v1.5.0.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/BACKEND-GUIDE.md",
+      "detail": "Page 'guides/BACKEND-GUIDE.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/COMPLETION_SUMMARY.md",
+      "detail": "Page 'guides/COMPLETION_SUMMARY.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/Claude-Throne v1.4.5 bug fixes.md",
+      "detail": "Page 'guides/Claude-Throne v1.4.5 bug fixes.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/Claude‑Throne PRD and Task List.md",
+      "detail": "Page 'guides/Claude‑Throne PRD and Task List.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/GUARDRAILS_COMPLETE.md",
+      "detail": "Page 'guides/GUARDRAILS_COMPLETE.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/MCP-Config-Converter.md",
+      "detail": "Page 'guides/MCP-Config-Converter.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/NEXT-VERSION.md",
+      "detail": "Page 'guides/NEXT-VERSION.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/Notes - v1.5.23 - 1.5.md",
+      "detail": "Page 'guides/Notes - v1.5.23 - 1.5.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/PHASE4-INTEGRATION.md",
+      "detail": "Page 'guides/PHASE4-INTEGRATION.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/PHASE6_HANDOFF.md",
+      "detail": "Page 'guides/PHASE6_HANDOFF.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/VERIFICATION-v1.5.0.md",
+      "detail": "Page 'guides/VERIFICATION-v1.5.0.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/WEBVIEW-GUIDE.md",
+      "detail": "Page 'guides/WEBVIEW-GUIDE.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/advanced-setup.md",
+      "detail": "Page 'guides/advanced-setup.md' has no inbound links"
+    },
+    {
+      "type": "orphan",
+      "target": "guides/deepseek_glm.md",
+      "detail": "Page 'guides/deepseek_glm.md' has no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/docs.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/docs.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/ct-secretsd.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/ct-secretsd.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/thronekeeper.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/thronekeeper.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/images.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/images.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.12.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.12.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.13.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.13.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.14.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.14.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.15.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.15.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.16.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.16.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.17.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.17.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.18.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.18.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.4.19.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.4.19.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.5.0.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.5.0.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/FIXES-v1.5.11.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/FIXES-v1.5.11.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": ".archive/.archive/SESSION-SUMMARY-v1.5.0.md",
+      "detail": "Suggested link from 'Home.md' to '.archive/.archive/SESSION-SUMMARY-v1.5.0.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/BACKEND-GUIDE.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/BACKEND-GUIDE.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/COMPLETION_SUMMARY.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/COMPLETION_SUMMARY.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/Claude-Throne v1.4.5 bug fixes.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/Claude-Throne v1.4.5 bug fixes.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/Claude‑Throne PRD and Task List.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/Claude‑Throne PRD and Task List.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/GUARDRAILS_COMPLETE.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/GUARDRAILS_COMPLETE.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/MCP-Config-Converter.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/MCP-Config-Converter.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/NEXT-VERSION.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/NEXT-VERSION.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/Notes - v1.5.23 - 1.5.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/Notes - v1.5.23 - 1.5.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/PHASE4-INTEGRATION.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/PHASE4-INTEGRATION.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/PHASE6_HANDOFF.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/PHASE6_HANDOFF.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/VERIFICATION-v1.5.0.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/VERIFICATION-v1.5.0.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/WEBVIEW-GUIDE.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/WEBVIEW-GUIDE.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/advanced-setup.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/advanced-setup.md': orphan page with no inbound links"
+    },
+    {
+      "type": "missing_crossref",
+      "target": "guides/deepseek_glm.md",
+      "detail": "Suggested link from 'Home.md' to 'guides/deepseek_glm.md': orphan page with no inbound links"
+    }
+  ],
+  "stubs": null,
+  "crossRefsGenerated": 38,
+  "gapScore": 1
+}

@@ -525,6 +525,12 @@ function activate(context) {
     const storeGlmKey = vscode.commands.registerCommand('claudeThrone.storeGlmKey', async () => {
         await storeKey('glm', secrets);
     });
+    const storeKimiKey = vscode.commands.registerCommand('claudeThrone.storeKimiKey', async () => {
+        await storeKey('kimi', secrets);
+    });
+    const storeMinimaxKey = vscode.commands.registerCommand('claudeThrone.storeMinimaxKey', async () => {
+        await storeKey('minimax', secrets);
+    });
     const storeCustomKey = vscode.commands.registerCommand('claudeThrone.storeCustomKey', async () => {
         await storeKey('custom', secrets);
     });
@@ -535,6 +541,8 @@ function activate(context) {
             { label: 'Together', id: 'together' },
             { label: 'Deepseek', id: 'deepseek' },
             { label: 'GLM', id: 'glm' },
+            { label: 'Kimi', id: 'kimi' },
+            { label: 'Minimax', id: 'minimax' },
             { label: 'Custom', id: 'custom' },
         ], { title: 'Choose Provider', canPickMany: false });
         if (!pick)
@@ -544,6 +552,7 @@ function activate(context) {
     const storeAnthropicKey = vscode.commands.registerCommand('claudeThrone.storeAnthropicKey', async () => {
         await storeAnthropicKeyHelper(secrets);
     });
+    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeKimiKey, storeMinimaxKey, storeCustomKey, storeAnyKey, storeAnthropicKey);
     const refreshAnthropicDefaults = vscode.commands.registerCommand('claudeThrone.refreshAnthropicDefaults', async () => {
         try {
             const defaults = await fetchAnthropicDefaults(secrets);
@@ -1163,6 +1172,8 @@ async function storeKey(provider, secrets) {
         together: 'Together API Key',
         deepseek: 'Deepseek API Key',
         glm: 'GLM API Key',
+        kimi: 'Kimi Coding Plan API Key',
+        minimax: 'Minimax API Key',
         custom: 'Custom Provider API Key',
     };
     const key = await vscode.window.showInputBox({

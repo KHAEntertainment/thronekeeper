@@ -1013,7 +1013,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       }
       
       // Check for conflicts with built-in providers
-      const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'custom', 'kimi', 'minimax']
+      const builtinProviders = ['openrouter', 'openai', 'together', 'deepseek', 'glm', 'kimi', 'minimax', 'custom']
       if (builtinProviders.includes(id.trim())) {
         vscode.window.showErrorMessage('Provider ID conflicts with built-in provider. Please choose a different name.')
         return
