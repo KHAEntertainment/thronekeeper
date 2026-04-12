@@ -9,6 +9,8 @@ const PROVIDERS = {
   glm: 'glm',
   anthropic: 'anthropic',
   grok: 'grok',
+  kimi: 'kimi',
+  minimax: 'minimax',
   custom: 'custom',
 }
 
@@ -31,6 +33,8 @@ const PROVIDER_KEY_SOURCES = {
   [PROVIDERS.glm]: ['GLM_API_KEY', 'ZAI_API_KEY'], // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ['ANTHROPIC_API_KEY'],
   [PROVIDERS.grok]: ['GROK_API_KEY', 'XAI_API_KEY'],
+  [PROVIDERS.kimi]: ['KIMI_API_KEY', 'ANTHROPIC_API_KEY'],
+  [PROVIDERS.minimax]: ['MINIMAX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
 }
 
 // Comment 4: Data-driven known-host registry for Anthropic-like endpoints
@@ -42,6 +46,7 @@ const ANTHROPIC_LIKE_PATTERNS = [
   { host: 'z.ai', path: 'anthropic' },
   { host: 'moonshot.cn', path: 'anthropic' }, // Comment 4: Known Anthropic-like provider
   { host: 'minimax.chat', path: 'anthropic' }, // Comment 4: Known Anthropic-like provider
+  { host: 'kimi.com', path: 'anthropic' }, // Comment 4: Kimi Code
   { path: '/anthropic' }, // Generic path pattern
 ]
 
@@ -99,6 +104,8 @@ export function detectProvider(baseUrl, env = process.env) {
     if (host.includes('anthropic.com') || host.includes('anthropic.ai') || host.endsWith('.anthropic.app')) return PROVIDERS.anthropic
     if (host.includes('x.ai') || host.includes('grok')) return PROVIDERS.grok
     if (/\/anthropic/.test(path)) return PROVIDERS.anthropic
+    if (host.includes('kimi.com') || host.includes('api.kimi')) return PROVIDERS.kimi
+    if (host.includes('minimax.io') || host.includes('minimax.chat')) return PROVIDERS.minimax
     return PROVIDERS.custom
   } catch {
     return PROVIDERS.custom
@@ -266,7 +273,7 @@ export async function inferEndpointKind(provider, baseUrl, overrides = {}, key =
   }
   
   // Fall back to automatic detection
-  if (provider === PROVIDERS.deepseek || provider === PROVIDERS.glm || provider === PROVIDERS.anthropic) {
+  if (provider === PROVIDERS.deepseek || provider === PROVIDERS.glm || provider === PROVIDERS.anthropic || provider === PROVIDERS.kimi || provider === PROVIDERS.minimax) {
     return { kind: ENDPOINT_KIND.ANTHROPIC_NATIVE, source: 'heuristic' }
   }
   if (isAnthropicLikeUrl(baseUrl)) {
@@ -309,7 +316,7 @@ export function inferEndpointKindSync(provider, baseUrl, overrides = {}) {
     }
   }
   
-  if (provider === PROVIDERS.deepseek || provider === PROVIDERS.glm || provider === PROVIDERS.anthropic) {
+  if (provider === PROVIDERS.deepseek || provider === PROVIDERS.glm || provider === PROVIDERS.anthropic || provider === PROVIDERS.kimi || provider === PROVIDERS.minimax) {
     return ENDPOINT_KIND.ANTHROPIC_NATIVE
   }
   if (isAnthropicLikeUrl(baseUrl)) {

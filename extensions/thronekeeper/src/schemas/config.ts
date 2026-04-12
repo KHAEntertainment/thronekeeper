@@ -105,7 +105,8 @@ export const ClaudeThroneConfigSchema = z.object({
     enableTokenValidation: z.boolean().default(true),
     enableKeyNormalization: z.boolean().default(true),
     enablePreApplyHydration: z.boolean().default(true),
-    enableAnthropicDirectApply: z.boolean().default(false) // Comment 10: Gate deprecated feature
+    enableAnthropicDirectApply: z.boolean().default(false), // Comment 10: Gate deprecated feature
+    enableAgentTeams: z.boolean().default(false) // KHA-269: Agent Teams feature flag
   }).optional()
 })
 

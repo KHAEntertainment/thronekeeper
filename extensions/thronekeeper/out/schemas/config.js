@@ -93,7 +93,8 @@ exports.ClaudeThroneConfigSchema = zod_1.z.object({
         enableTokenValidation: zod_1.z.boolean().default(true),
         enableKeyNormalization: zod_1.z.boolean().default(true),
         enablePreApplyHydration: zod_1.z.boolean().default(true),
-        enableAnthropicDirectApply: zod_1.z.boolean().default(false) // Comment 10: Gate deprecated feature
+        enableAnthropicDirectApply: zod_1.z.boolean().default(false), // Comment 10: Gate deprecated feature
+        enableAgentTeams: zod_1.z.boolean().default(false) // KHA-269: Agent Teams feature flag
     }).optional()
 });
 // ============================================================================

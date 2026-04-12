@@ -46,7 +46,8 @@
     enableSchemaValidation: true, // Default enabled
     enableTokenValidation: true,
     enableKeyNormalization: true,
-    enablePreApplyHydration: true
+    enablePreApplyHydration: true,
+    enableAgentTeams: false // KHA-269: Agent Teams feature flag
   },
   // Comment 2: Error telemetry buffer
   errorBuffer: [], // In-memory buffer of recent errors
@@ -529,6 +530,16 @@
       vscode.postMessage({
         type: 'updateDebug',
         enabled: e.target.checked
+      });
+    });
+
+    // Agent Teams Checkbox (KHA-269)
+    const agentTeamsCheckbox = document.getElementById('agentTeamsCheckbox');
+    agentTeamsCheckbox?.addEventListener('change', (e) => {
+      vscode.postMessage({
+        type: 'updateFeatureFlag',
+        flag: 'enableAgentTeams',
+        value: e.target.checked
       });
     });
 
@@ -2853,6 +2864,12 @@
     // Set debug checkbox state
     if (config.debug !== undefined) {
       document.getElementById('debugCheckbox').checked = config.debug;
+    }
+
+    // Set Agent Teams checkbox state (KHA-269)
+    const agentTeamsCheckbox = document.getElementById('agentTeamsCheckbox');
+    if (agentTeamsCheckbox && config.featureFlags?.enableAgentTeams !== undefined) {
+      agentTeamsCheckbox.checked = config.featureFlags.enableAgentTeams;
     }
 
     // Update selected models display

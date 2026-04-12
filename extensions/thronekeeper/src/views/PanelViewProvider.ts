@@ -387,6 +387,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
           case 'updateDebug':
             await this.handleUpdateDebug(msg.enabled)
             break
+          case 'updateFeatureFlag':
+            await this.handleUpdateFeatureFlag(msg.flag, msg.value)
+            break
           default:
             this.log.appendLine(`Unknown message type received: ${msg.type}`)
         }
@@ -524,7 +527,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       enableSchemaValidation: true,
       enableTokenValidation: true,
       enableKeyNormalization: true,
-      enablePreApplyHydration: true
+      enablePreApplyHydration: true,
+      enableAgentTeams: false
     });
     
     this.post({
@@ -1944,6 +1948,21 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     this.log.appendLine(`[handleUpdateDebug] Debug setting updated successfully`)
   }
 
+  private async handleUpdateFeatureFlag(flag: string, value: boolean) {
+    this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} = ${value}`)
+
+    const cfg = vscode.workspace.getConfiguration('claudeThrone')
+    const applyScope = cfg.get<string>('applyScope', 'workspace')
+    const target = this.getConfigurationTarget(applyScope)
+
+    // Get existing feature flags or use defaults
+    const existingFlags = cfg.get<any>('featureFlags', {}) || {}
+    const updatedFlags = { ...existingFlags, [flag]: value }
+
+    await cfg.update('featureFlags', updatedFlags, target)
+    this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} updated to ${value}`)
+  }
+
   private getHtml(): string {
     const nonce = String(Math.random()).slice(2)
     const cssUri = this.view!.webview.asWebviewUri(
@@ -2087,6 +2106,15 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
               <div class="security-note">🔒 Stored securely in your system keychain</div>
               <div id="anthropicCacheContainer" class="form-group" style="display: none;"></div>
               <button class="btn-add-custom-provider" id="addCustomProviderBtn" type="button" style="display: none;">+ Add Custom Provider</button>
+            </div>
+            <div class="form-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="agentTeamsCheckbox">
+                <span style="font-size: 12px;">Enable Agent Teams</span>
+              </label>
+              <p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
+                Enable Claude Agent Teams for multi-agent swarm collaboration
+              </p>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
