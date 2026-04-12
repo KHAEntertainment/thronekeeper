@@ -18,6 +18,20 @@ import { injectXMLToolInstructions } from './xml-tool-formatter.js'
 import { parseAssistantMessage } from './xml-tool-parser.js'
 import { redactSecrets } from './utils/redaction.js'
 
+// PGP block stripping for Grok multi-agent responses
+const PGP_BLOCK_PATTERN = /-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/g
+
+/**
+ * Strip PGP armored blocks from text content.
+ * Used for Grok multi-agent responses that include encrypted sub-agent state.
+ * @param {string} text - Text that may contain PGP blocks
+ * @returns {string} - Clean text with PGP blocks removed
+ */
+function stripPgpBlocks(text) {
+  if (!text || typeof text !== 'string') return text
+  return text.replace(PGP_BLOCK_PATTERN, '').trim()
+}
+
 let packageVersion = '0.0.0'
 let packageDir = null
 
@@ -1299,6 +1313,11 @@ fastify.post('/v1/messages', async (request, reply) => {
       const choice = data.choices[0]
       const openaiMessage = choice.message
 
+      // Strip PGP blocks from Grok multi-agent responses
+      if (provider === 'grok' && selectedModel.includes('multi-agent')) {
+        openaiMessage.content = stripPgpBlocks(openaiMessage.content)
+      }
+
       // Map finish_reason to anthropic stop_reason.
       const stopReason = mapStopReason(choice.finish_reason)
       
@@ -1482,6 +1501,10 @@ fastify.post('/v1/messages', async (request, reply) => {
                   debug('[Streaming] Could not parse buffered data, discarding:', chunkBuffer.substring(0, 100))
                 }
                 chunkBuffer = ''
+              }
+              // Strip PGP blocks from Grok multi-agent streaming responses
+              if (provider === 'grok' && selectedModel.includes('multi-agent')) {
+                accumulatedContent = stripPgpBlocks(accumulatedContent)
               }
               const trimmedContent = accumulatedContent.trim()
               const trimmedReasoning = accumulatedReasoning.trim()
