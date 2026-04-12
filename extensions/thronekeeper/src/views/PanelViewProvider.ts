@@ -2091,7 +2091,15 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                 Automatically assigns your selected reasoning model for planning tasks and your completion model for coding/execution
               </div>
             </div>
-            
+
+            <div class="two-model-toggle" style="margin-left: 20px; margin-top: 8px;">
+              <input type="checkbox" id="agentTeamsCheckbox">
+              <label for="agentTeamsCheckbox">Enable Agent Teams</label>
+              <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
+                Enable Claude Agent Teams for multi-agent swarm collaboration
+              </div>
+            </div>
+
             <div id="selectedModelsDisplay" class="selected-models-display" style="margin-top: 12px; font-size: 11px; color: var(--vscode-descriptionForeground);">
               <div id="reasoningModelDisplay" style="margin-bottom: 4px;"></div>
               <div id="codingModelDisplay" style="margin-bottom: 4px;"></div>
@@ -2136,15 +2144,6 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
               <div class="security-note">🔒 Stored securely in your system keychain</div>
               <div id="anthropicCacheContainer" class="form-group" style="display: none;"></div>
               <button class="btn-add-custom-provider" id="addCustomProviderBtn" type="button" style="display: none;">+ Add Custom Provider</button>
-            </div>
-            <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="agentTeamsCheckbox">
-                <span style="font-size: 12px;">Enable Agent Teams</span>
-              </label>
-              <p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
-                Enable Claude Agent Teams for multi-agent swarm collaboration
-              </p>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
