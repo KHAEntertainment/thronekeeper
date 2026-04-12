@@ -1960,6 +1960,17 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     const updatedFlags = { ...existingFlags, [flag]: value }
 
     await cfg.update('featureFlags', updatedFlags, target)
+
+    // KHA-269: Re-apply Agent Teams env var immediately when the flag changes
+    if (flag === 'enableAgentTeams') {
+      const isRunning = this.proxy?.getStatus()?.running === true
+      const autoApply = cfg.get<boolean>('autoApply', true)
+      if (isRunning && autoApply) {
+        this.log.appendLine(`[handleUpdateFeatureFlag] Proxy running with autoApply - re-applying config`)
+        await vscode.commands.executeCommand('claudeThrone.applyToClaudeCode')
+      }
+    }
+
     this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} updated to ${value}`)
   }
 

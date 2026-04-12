@@ -33,7 +33,7 @@ const PROVIDER_KEY_SOURCES = {
   [PROVIDERS.glm]: ['GLM_API_KEY', 'ZAI_API_KEY'], // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ['ANTHROPIC_API_KEY'],
   [PROVIDERS.grok]: ['GROK_API_KEY', 'XAI_API_KEY'],
-  [PROVIDERS.kimi]: ['KIMI_API_KEY', 'ANTHROPIC_API_KEY'],
+  [PROVIDERS.kimi]: ['KIMI_API_KEY'],
   [PROVIDERS.minimax]: ['MINIMAX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
 }
 
@@ -103,9 +103,11 @@ export function detectProvider(baseUrl, env = process.env) {
     if (host.includes('z.ai')) return PROVIDERS.glm
     if (host.includes('anthropic.com') || host.includes('anthropic.ai') || host.endsWith('.anthropic.app')) return PROVIDERS.anthropic
     if (host.includes('x.ai') || host.includes('grok')) return PROVIDERS.grok
+    // Use endsWith/equality to avoid false positives from substring matching
+    // e.g., "evil-kimi.com.example.com" should NOT match kimi.com
+    if (host === 'kimi.com' || host === 'api.kimi.com' || host.endsWith('.kimi.com')) return PROVIDERS.kimi
+    if (host === 'minimax.io' || host === 'api.minimax.io' || host.endsWith('.minimax.io') || host === 'minimax.chat' || host.endsWith('.minimax.chat')) return PROVIDERS.minimax
     if (/\/anthropic/.test(path)) return PROVIDERS.anthropic
-    if (host.includes('kimi.com') || host.includes('api.kimi')) return PROVIDERS.kimi
-    if (host.includes('minimax.io') || host.includes('minimax.chat')) return PROVIDERS.minimax
     return PROVIDERS.custom
   } catch {
     return PROVIDERS.custom

@@ -2868,8 +2868,10 @@
 
     // Set Agent Teams checkbox state (KHA-269)
     const agentTeamsCheckbox = document.getElementById('agentTeamsCheckbox');
-    if (agentTeamsCheckbox && config.featureFlags?.enableAgentTeams !== undefined) {
-      agentTeamsCheckbox.checked = config.featureFlags.enableAgentTeams;
+    const agentTeamsEnabled = Boolean(config.featureFlags?.enableAgentTeams ?? false);
+    state.featureFlags.enableAgentTeams = agentTeamsEnabled;
+    if (agentTeamsCheckbox) {
+      agentTeamsCheckbox.checked = agentTeamsEnabled;
     }
 
     // Update selected models display

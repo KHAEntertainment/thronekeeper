@@ -396,6 +396,7 @@ function activate(context) {
                 // Remove Claude Code environment variables when reverting
                 restoreEnv.API_TIMEOUT_MS = null;
                 restoreEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = null;
+                restoreEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = null;
                 // Single call: atomic update
                 await (0, ClaudeSettings_1.updateClaudeSettings)(settingsDir, restoreEnv, /*revert*/ false);
             }
