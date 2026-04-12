@@ -559,12 +559,18 @@ export function activate(context: vscode.ExtensionContext) {
   const storeGlmKey = vscode.commands.registerCommand('claudeThrone.storeGlmKey', async () => {
     await storeKey('glm', secrets)
   })
-  const storeKimiKey = vscode.commands.registerCommand('claudeThrone.storeKimiKey', async () => {
-    await storeKey('kimi', secrets)
-  })
-  const storeMinimaxKey = vscode.commands.registerCommand('claudeThrone.storeMinimaxKey', async () => {
-    await storeKey('minimax', secrets)
-  })
+  context.subscriptions.push(
+    openPanel,
+    storeOpenRouterKey,
+    storeOpenAIKey,
+    storeTogetherKey,
+    storeDeepseekKey,
+    storeGlmKey,
+    storeKimiKey,
+    storeMinimaxKey,
+    storeCustomKey,
+    storeAnyKey,
+    storeAnthropicKey,
   const storeCustomKey = vscode.commands.registerCommand('claudeThrone.storeCustomKey', async () => {
     await storeKey('custom', secrets)
   })
