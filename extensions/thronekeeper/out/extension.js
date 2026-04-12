@@ -552,6 +552,7 @@ function activate(context) {
     const storeAnthropicKey = vscode.commands.registerCommand('claudeThrone.storeAnthropicKey', async () => {
         await storeAnthropicKeyHelper(secrets);
     });
+    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeKimiKey, storeMinimaxKey, storeCustomKey, storeAnyKey, storeAnthropicKey);
     const refreshAnthropicDefaults = vscode.commands.registerCommand('claudeThrone.refreshAnthropicDefaults', async () => {
         try {
             const defaults = await fetchAnthropicDefaults(secrets);
