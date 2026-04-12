@@ -1954,6 +1954,10 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       this.log.appendLine(`[handleUpdateFeatureFlag] Rejected invalid flag name: ${flag}`)
       return
     }
+    if (typeof value !== 'boolean') {
+      this.log.appendLine(`[handleUpdateFeatureFlag] Rejected non-boolean value for ${flag}: ${JSON.stringify(value)}`)
+      return
+    }
     const KNOWN_FLAGS = ['enableAgentTeams']
     if (!KNOWN_FLAGS.includes(flag)) {
       this.log.appendLine(`[handleUpdateFeatureFlag] Unknown flag: ${flag}`)
@@ -1967,7 +1971,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     const target = this.getConfigurationTarget(applyScope)
 
     // Get existing feature flags or use defaults
-    const existingFlags = cfg.get<any>('featureFlags', {}) || {}
+    const existingFlagsRaw = cfg.get<unknown>('featureFlags', {})
+    const existingFlags =
+      existingFlagsRaw && typeof existingFlagsRaw === 'object' && !Array.isArray(existingFlagsRaw)
+        ? (existingFlagsRaw as Record<string, unknown>)
+        : {}
     const updatedFlags = { ...existingFlags, [flag]: value }
 
     await cfg.update('featureFlags', updatedFlags, target)
