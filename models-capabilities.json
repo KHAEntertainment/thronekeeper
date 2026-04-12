@@ -1,4 +1,13 @@
 {
+  "models": {
+    "x-ai/grok-4.20-multi-agent": {
+      "streaming": true,
+      "tools": true,
+      "thinking": true,
+      "vision": false,
+      "premium": true
+    }
+  },
   "xmlTools": {
     "deepseek": [
       "/^deepseek[-_]?v[0-9]/i",
