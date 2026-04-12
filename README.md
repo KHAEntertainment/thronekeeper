@@ -5,8 +5,8 @@
 > **🎉 v1.5.62 — Enable dynamic model fetching for Deepseek/GLM providers!** ✨
 
 <p align="center">
-  <img src="docs/images/thronekeeper-hero.png" alt="Thronekeeper - Universal AI Model Routing" width="800">
-  </p>
+  <img src="https://raw.githubusercontent.com/KHAEntertainment/claude-throne/main/docs/images/thronekeeper-hero.png" alt="Thronekeeper - Universal AI Model Routing" width="800">
+</p>
 
 ## 🚀 Quick Start
 
@@ -117,7 +117,7 @@ Note: `claudeThrone.twoModelMode` enables “three-model” selection (reasoning
 git clone https://github.com/KHAEntertainment/thronekeeper.git
 cd thronekeeper
 npm install
-npm run ext:package  # Creates .vsix in extensions/claude-throne/
+npm run ext:package  # Creates .vsix in extensions/thronekeeper/
 ```
 
 ## 🙏 Attribution

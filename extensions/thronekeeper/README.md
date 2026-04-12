@@ -23,15 +23,14 @@ Thronekeeper is a powerful VS Code extension that acts as an intelligent proxy, 
 - **Popular Pairings**: Pre-configured model combinations for optimal performance
 - **Live Status Monitoring**: See proxy status, selected models, and health checks
 
-<!-- Screenshot placeholders -->
-![Thronekeeper Panel](images/panel-overview.png)
+<!-- Logo -->
+<p align="center">
+  <img src="https://raw.githubusercontent.com/KHAEntertainment/claude-throne/main/docs/images/thronekeeper-logo.jpg" alt="Thronekeeper Logo" width="200">
+</p>
+
+<!-- Main Screenshot -->
+![Thronekeeper Panel](https://raw.githubusercontent.com/KHAEntertainment/claude-throne/main/docs/images/panel.png)
 *The Thronekeeper configuration panel - manage providers, models, and settings*
-
-![Model Selection](images/model-selection.png)
-*Browse and search hundreds of available models with real-time loading*
-
-![Three-Model Mode](images/three-model-mode.png)
-*Configure separate models for reasoning, completion, and value tasks*
 
 ## 🚀 Quick Start
 

@@ -8,7 +8,7 @@ set -euo pipefail
 #   PREID=<label>                        (used when BUMP=prerelease, e.g. PREID=alpha)
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EXT_DIR="$ROOT_DIR/extensions/claude-throne"
+EXT_DIR="$ROOT_DIR/extensions/thronekeeper"
 ARCHIVE_DIR="$ROOT_DIR/.archive/tests/compiled"
 
 mkdir -p "$ARCHIVE_DIR"
@@ -76,5 +76,5 @@ if [[ "$VSIX_FILE" != "$EXPECTED_PATH" ]]; then
 fi
 
 echo "Success: $VSIX_FILE"
-echo "VSIX created at: extensions/claude-throne/$VSIX_BASENAME"
+echo "VSIX created at: extensions/thronekeeper/$VSIX_BASENAME"
 
