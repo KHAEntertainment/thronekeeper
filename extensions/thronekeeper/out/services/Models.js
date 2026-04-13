@@ -225,6 +225,13 @@ async function listModels(provider, baseUrl, apiKey) {
     if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) {
         throw new Error('Custom provider requires a base URL');
     }
+    // KHA-267: Endpoints that do not implement standard /v1/models JSON responses should trigger the Manual Entry UI
+    if (provider === 'minimax') {
+        throw new Error('Minimax models must be entered manually.');
+    }
+    if (provider === 'kimi') {
+        throw new Error('Kimi models must be entered manually.');
+    }
     // Comment 3: Track start time for overall budget tracking
     const startTime = Date.now();
     // Comment 3: Overall budget (50 seconds) - can be adjusted between 45-60s

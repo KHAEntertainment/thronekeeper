@@ -28789,7 +28789,7 @@ var require_route = __commonJS({
       "useSemicolonDelimiter"
     ];
     function buildRouting(options) {
-      const router = FindMyWay(options.config);
+      const router2 = FindMyWay(options.config);
       let avvio;
       let fourOhFour;
       let logger;
@@ -28822,7 +28822,7 @@ var require_route = __commonJS({
           return503OnClosing = Object.hasOwn(options2, "return503OnClosing") ? options2.return503OnClosing : true;
           keepAliveConnections = fastifyArgs.keepAliveConnections;
         },
-        routing: router.lookup.bind(router),
+        routing: router2.lookup.bind(router2),
         // router func to find the right handler to call
         route,
         // configure a route in the fastify instance
@@ -28832,7 +28832,7 @@ var require_route = __commonJS({
         closeRoutes: () => {
           closing = true;
         },
-        printRoutes: router.prettyPrint.bind(router),
+        printRoutes: router2.prettyPrint.bind(router2),
         addConstraintStrategy,
         hasConstraintStrategy,
         isAsyncConstraint,
@@ -28840,13 +28840,13 @@ var require_route = __commonJS({
       };
       function addConstraintStrategy(strategy) {
         throwIfAlreadyStarted("Cannot add constraint strategy!");
-        return router.addConstraintStrategy(strategy);
+        return router2.addConstraintStrategy(strategy);
       }
       function hasConstraintStrategy(strategyName) {
-        return router.hasConstraintStrategy(strategyName);
+        return router2.hasConstraintStrategy(strategyName);
       }
       function isAsyncConstraint() {
-        return router.constrainer.asyncStrategiesInUse.size > 0;
+        return router2.constrainer.asyncStrategiesInUse.size > 0;
       }
       function prepareRoute({ method, url, options: options2, handler, isFastify }) {
         if (typeof url !== "string") {
@@ -28876,14 +28876,14 @@ var require_route = __commonJS({
       }
       function hasRoute({ options: options2 }) {
         const normalizedMethod = options2.method?.toUpperCase() ?? "";
-        return router.hasRoute(
+        return router2.hasRoute(
           normalizedMethod,
           options2.url || "",
           options2.constraints
         );
       }
       function findRoute(options2) {
-        const route2 = router.find(
+        const route2 = router2.find(
           options2.method,
           options2.url || "",
           options2.constraints
@@ -29017,10 +29017,10 @@ var require_route = __commonJS({
             server: this,
             isFastify: isFastify2
           });
-          const headHandler = router.findRoute("HEAD", opts.url, constraints);
+          const headHandler = router2.findRoute("HEAD", opts.url, constraints);
           const hasHEADHandler = headHandler !== null;
           try {
-            router.on(opts.method, opts.url, { constraints }, routeHandler, context);
+            router2.on(opts.method, opts.url, { constraints }, routeHandler, context);
           } catch (error) {
             if (!context[kRouteByFastify]) {
               const isDuplicatedRoute = error.message.includes(`Method '${opts.method}' already declared for route`);
@@ -29249,14 +29249,14 @@ var require_fourOhFour = __commonJS({
     var { getGenReqId } = require_reqIdGenFactory();
     function fourOhFour(options) {
       const { logger, disableRequestLogging } = options;
-      const router = FindMyWay({ onBadUrl: createOnBadUrl(), defaultRoute: fourOhFourFallBack });
+      const router2 = FindMyWay({ onBadUrl: createOnBadUrl(), defaultRoute: fourOhFourFallBack });
       let _onBadUrlHandler = null;
-      return { router, setNotFoundHandler, setContext, arrange404 };
+      return { router: router2, setNotFoundHandler, setContext, arrange404 };
       function arrange404(instance) {
         instance[kFourOhFourLevelInstance] = instance;
         instance[kCanSetNotFoundHandler] = true;
-        router.onBadUrl = router.onBadUrl.bind(instance);
-        router.defaultRoute = router.defaultRoute.bind(instance);
+        router2.onBadUrl = router2.onBadUrl.bind(instance);
+        router2.defaultRoute = router2.defaultRoute.bind(instance);
       }
       function basic404(request, reply) {
         const { url, method } = request.raw;
@@ -29351,8 +29351,8 @@ var require_fourOhFour = __commonJS({
           return;
         }
         this[kFourOhFourLevelInstance][kFourOhFourContext] = context;
-        router.all(prefix + (prefix.endsWith("/") ? "*" : "/*"), routeHandler, context);
-        router.all(prefix, routeHandler, context);
+        router2.all(prefix + (prefix.endsWith("/") ? "*" : "/*"), routeHandler, context);
+        router2.all(prefix, routeHandler, context);
       }
       function fourOhFourFallBack(req, res) {
         const fourOhFourContext = this[kFourOhFourLevelInstance][kFourOhFourContext];
@@ -29362,7 +29362,7 @@ var require_fourOhFour = __commonJS({
         const request = new Request(id, null, req, null, childLogger, fourOhFourContext);
         const reply = new Reply(res, request, childLogger);
         request.log.warn("the default handler for 404 did not catch this, this is likely a fastify bug, please report it");
-        request.log.warn(router.prettyPrint());
+        request.log.warn(router2.prettyPrint());
         reply.code(404).send(new FST_ERR_NOT_FOUND());
       }
     }
@@ -32668,11 +32668,11 @@ var require_fastify = __commonJS({
         buildPrettyMeta: defaultBuildPrettyMeta,
         useSemicolonDelimiter: defaultInitOptions.useSemicolonDelimiter
       });
-      const router = buildRouting({
+      const router2 = buildRouting({
         config: options.routerOptions
       });
       const fourOhFour = build404(options);
-      const httpHandler = wrapRouting(router, options);
+      const httpHandler = wrapRouting(router2, options);
       options.http2SessionTimeout = initialConfig.http2SessionTimeout;
       const { server, listen } = createServer(options, httpHandler);
       const serverHasCloseAllConnections = typeof server.closeAllConnections === "function";
@@ -32745,41 +32745,41 @@ var require_fastify = __commonJS({
         routing: httpHandler,
         // routes shorthand methods
         delete: function _delete(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "DELETE", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "DELETE", url, options: options2, handler });
         },
         get: function _get(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "GET", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "GET", url, options: options2, handler });
         },
         head: function _head(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "HEAD", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "HEAD", url, options: options2, handler });
         },
         trace: function _trace(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "TRACE", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "TRACE", url, options: options2, handler });
         },
         patch: function _patch(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "PATCH", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "PATCH", url, options: options2, handler });
         },
         post: function _post(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "POST", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "POST", url, options: options2, handler });
         },
         put: function _put(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "PUT", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "PUT", url, options: options2, handler });
         },
         options: function _options(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "OPTIONS", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "OPTIONS", url, options: options2, handler });
         },
         all: function _all(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: this.supportedMethods, url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: this.supportedMethods, url, options: options2, handler });
         },
         // extended route
         route: function _route(options2) {
-          return router.route.call(this, { options: options2 });
+          return router2.route.call(this, { options: options2 });
         },
         hasRoute: function _route(options2) {
-          return router.hasRoute.call(this, { options: options2 });
+          return router2.hasRoute.call(this, { options: options2 });
         },
         findRoute: function _findRoute(options2) {
-          return router.findRoute(options2);
+          return router2.findRoute(options2);
         },
         // expose logger instance
         log: logger,
@@ -32844,8 +32844,8 @@ var require_fastify = __commonJS({
         // Set fastify initial configuration options read-only object
         initialConfig,
         // constraint strategies
-        addConstraintStrategy: router.addConstraintStrategy.bind(router),
-        hasConstraintStrategy: router.hasConstraintStrategy.bind(router)
+        addConstraintStrategy: router2.addConstraintStrategy.bind(router2),
+        hasConstraintStrategy: router2.hasConstraintStrategy.bind(router2)
       };
       Object.defineProperties(fastify3, {
         listeningOrigin: {
@@ -32939,7 +32939,7 @@ var require_fastify = __commonJS({
       avvio.once("preReady", () => {
         fastify3.onClose((instance, done) => {
           fastify3[kState].closing = true;
-          router.closeRoutes();
+          router2.closeRoutes();
           hookRunnerApplication("preClose", fastify3[kAvvioBoot], fastify3, function() {
             if (fastify3[kState].listening) {
               if (forceCloseConnections === "idle") {
@@ -32976,7 +32976,7 @@ var require_fastify = __commonJS({
       });
       fastify3.setNotFoundHandler();
       fourOhFour.arrange404(fastify3);
-      router.setup(options, {
+      router2.setup(options, {
         avvio,
         fourOhFour,
         logger,
@@ -33200,7 +33200,7 @@ ${body}`);
       }
       function setNotFoundHandler(opts, handler) {
         throwIfAlreadyStarted('Cannot call "setNotFoundHandler"!');
-        fourOhFour.setNotFoundHandler.call(this, opts, handler, avvio, router.routeHandler);
+        fourOhFour.setNotFoundHandler.call(this, opts, handler, avvio, router2.routeHandler);
         return this;
       }
       function setValidatorCompiler(validatorCompiler) {
@@ -33254,12 +33254,12 @@ ${body}`);
       }
       function printRoutes(opts = {}) {
         opts.includeMeta = opts.includeHooks ? opts.includeMeta ? supportedHooks.concat(opts.includeMeta) : supportedHooks : opts.includeMeta;
-        return router.printRoutes(opts);
+        return router2.printRoutes(opts);
       }
-      function wrapRouting(router2, { rewriteUrl, logger: logger2 }) {
+      function wrapRouting(router3, { rewriteUrl, logger: logger2 }) {
         let isAsync;
         return function preRouting(req, res) {
-          if (isAsync === void 0) isAsync = router2.isAsyncConstraint();
+          if (isAsync === void 0) isAsync = router3.isAsyncConstraint();
           if (rewriteUrl) {
             req.originalUrl = req.url;
             const url = rewriteUrl.call(fastify3, req);
@@ -33270,7 +33270,7 @@ ${body}`);
               req.destroy(err);
             }
           }
-          router2.routing(req, res, buildAsyncConstraintCallback(isAsync, req, res));
+          router3.routing(req, res, buildAsyncConstraintCallback(isAsync, req, res));
         };
       }
       function setGenReqId(func) {
@@ -33292,7 +33292,7 @@ ${body}`);
         const _method = method.toLowerCase();
         if (!this.hasDecorator(_method)) {
           this.decorate(_method, function(url, options2, handler) {
-            return router.prepareRoute.call(this, { method, url, options: options2, handler });
+            return router2.prepareRoute.call(this, { method, url, options: options2, handler });
           });
         }
         return this;
@@ -33350,7 +33350,7 @@ var PROVIDER_KEY_SOURCES = {
   // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ["ANTHROPIC_API_KEY"],
   [PROVIDERS.grok]: ["GROK_API_KEY", "XAI_API_KEY"],
-  [PROVIDERS.kimi]: ["KIMI_API_KEY"],
+  [PROVIDERS.kimi]: ["ANTHROPIC_API_KEY"],
   [PROVIDERS.minimax]: ["MINIMAX_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 };
 var ANTHROPIC_LIKE_PATTERNS = [
@@ -33895,6 +33895,235 @@ function detectHighThinking(content) {
   return HIGH_THINKING_PHRASES.some((phrase) => lowerContent.includes(phrase.toLowerCase()));
 }
 
+// ../../provider-router.js
+var ProviderContext = class {
+  /**
+   * @param {object} config
+   * @param {string} config.providerId - Provider identifier (e.g., 'glm', 'minimax', 'kimi', 'custom')
+   * @param {string} config.baseUrl - Upstream base URL (e.g., 'https://api.z.ai/api/anthropic')
+   * @param {string} config.key - API key for this provider
+   * @param {string} config.model - Model name at the upstream provider (without namespace prefix)
+   * @param {string} config.tier - Which tier this context serves: 'reasoning', 'completion', or 'value'
+   * @param {string} [config.endpointKind] - Override endpoint kind; auto-detected if omitted
+   * @param {Object<string,string>} [config.endpointOverrides] - Optional endpoint kind overrides map
+   */
+  constructor({
+    providerId,
+    baseUrl: baseUrl2,
+    key: key2,
+    model: model2,
+    tier,
+    endpointKind: endpointKind2,
+    endpointOverrides = {}
+  }) {
+    this.providerId = providerId;
+    this.baseUrl = (baseUrl2 || "").replace(/\/+$/, "");
+    this.key = key2;
+    this.model = model2;
+    this.tier = tier;
+    if (endpointKind2) {
+      if (endpointKind2 === "anthropic" || endpointKind2 === "anthropic-native") {
+        this.endpointKind = ENDPOINT_KIND.ANTHROPIC_NATIVE;
+      } else if (endpointKind2 === "openai" || endpointKind2 === "openai-compatible") {
+        this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE;
+      } else {
+        this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
+      }
+    } else {
+      this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
+    }
+  }
+  /**
+   * Whether this provider uses Anthropic-native protocol.
+   * @returns {boolean}
+   */
+  isAnthropicNative() {
+    return this.endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
+  }
+  /**
+   * Build the correct upstream request URL for this provider.
+   * @returns {string} Full URL for the API endpoint
+   */
+  getUpstreamUrl() {
+    if (this.isAnthropicNative()) {
+      return `${this.baseUrl}/v1/messages`;
+    }
+    return `${this.baseUrl}/v1/chat/completions`;
+  }
+  /**
+   * Build the correct authentication and content-type headers for this provider.
+   * @returns {Object<string,string>} Headers object ready for fetch()
+   */
+  getHeaders() {
+    const headers = {
+      "Content-Type": "application/json",
+      ...providerSpecificHeaders(this.providerId)
+    };
+    if (!this.key) {
+      return headers;
+    }
+    if (this.isAnthropicNative()) {
+      headers["x-api-key"] = this.key;
+      headers["anthropic-version"] = process.env.ANTHROPIC_VERSION || "2023-06-01";
+      if (process.env.ANTHROPIC_BETA) {
+        headers["anthropic-beta"] = process.env.ANTHROPIC_BETA;
+      }
+    } else {
+      headers["Authorization"] = `Bearer ${this.key}`;
+    }
+    return headers;
+  }
+  /**
+   * Returns a safe (redacted) representation for logging.
+   * @returns {object}
+   */
+  toDebugObject() {
+    return {
+      providerId: this.providerId,
+      baseUrl: this.baseUrl,
+      model: this.model,
+      tier: this.tier,
+      endpointKind: this.endpointKind,
+      hasKey: !!this.key
+    };
+  }
+};
+var ProviderRouter = class {
+  /**
+   * @param {object} config - Parsed MIXED_PROVIDERS_CONFIG
+   * @param {object} config.reasoning  - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {object} config.completion - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {object} config.value      - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {Object<string,string>} [endpointOverrides={}] - Optional endpoint kind overrides
+   */
+  constructor(config, endpointOverrides = {}) {
+    if (!config || !config.reasoning || !config.completion || !config.value) {
+      throw new Error(
+        "[ProviderRouter] Invalid config: must include reasoning, completion, and value tiers"
+      );
+    }
+    this.contexts = {
+      reasoning: new ProviderContext({
+        ...config.reasoning,
+        tier: "reasoning",
+        endpointOverrides
+      }),
+      completion: new ProviderContext({
+        ...config.completion,
+        tier: "completion",
+        endpointOverrides
+      }),
+      value: new ProviderContext({
+        ...config.value,
+        tier: "value",
+        endpointOverrides
+      })
+    };
+    this.tierMap = /* @__PURE__ */ new Map();
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      if (ctx.model) {
+        this.tierMap.set(ctx.model, { tier, context: ctx });
+      }
+    }
+  }
+  /**
+   * Given a model name from an incoming request, resolve which ProviderContext to use.
+   *
+   * @param {string} modelName - The model name from payload.model
+   * @returns {{ tier: string, context: ProviderContext } | null} Resolved context, or null if not found
+   */
+  resolve(modelName) {
+    if (!modelName) return null;
+    const exact = this.tierMap.get(modelName);
+    if (exact) return exact;
+    const lower = modelName.toLowerCase();
+    for (const [name, entry] of this.tierMap) {
+      if (name.toLowerCase() === lower) return entry;
+    }
+    return null;
+  }
+  /**
+   * Get the ProviderContext for a specific tier directly.
+   *
+   * @param {'reasoning' | 'completion' | 'value'} tier
+   * @returns {ProviderContext}
+   */
+  getContextForTier(tier) {
+    return this.contexts[tier] || null;
+  }
+  /**
+   * Smart key validation: check that every unique provider ID has a key stored.
+   * If two tiers share the same provider, only one key is needed.
+   *
+   * @returns {{ valid: boolean, missing: string[], uniqueProviders: string[] }}
+   */
+  validate() {
+    const uniqueProviders = /* @__PURE__ */ new Set();
+    const providerToKey = /* @__PURE__ */ new Map();
+    for (const ctx of Object.values(this.contexts)) {
+      uniqueProviders.add(ctx.providerId);
+      if (ctx.key) {
+        providerToKey.set(ctx.providerId, true);
+      }
+    }
+    const missing = [];
+    for (const pid of uniqueProviders) {
+      if (!providerToKey.has(pid)) {
+        missing.push(pid);
+      }
+    }
+    return {
+      valid: missing.length === 0,
+      missing,
+      uniqueProviders: [...uniqueProviders]
+    };
+  }
+  /**
+   * Returns a safe (redacted) representation of the full router state for logging.
+   * @returns {object}
+   */
+  toDebugObject() {
+    return {
+      reasoning: this.contexts.reasoning.toDebugObject(),
+      completion: this.contexts.completion.toDebugObject(),
+      value: this.contexts.value.toDebugObject(),
+      tierMapSize: this.tierMap.size,
+      models: [...this.tierMap.keys()]
+    };
+  }
+};
+function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
+  const raw = env.MIXED_PROVIDERS_CONFIG;
+  if (!raw) return null;
+  try {
+    const config = JSON.parse(raw);
+    const router2 = new ProviderRouter(config, endpointOverrides);
+    const validation = router2.validate();
+    if (!validation.valid) {
+      console.error(
+        `[ProviderRouter] Missing API keys for providers: ${validation.missing.join(", ")}`
+      );
+      console.error(
+        "[ProviderRouter] Mixed provider mode requires stored keys for all unique providers."
+      );
+    }
+    if (process.env.DEBUG) {
+      console.log("[ProviderRouter] Initialized:", JSON.stringify(router2.toDebugObject(), null, 2));
+    } else {
+      console.log(
+        `[ProviderRouter] Mixed mode active: ${validation.uniqueProviders.length} unique providers, models: [${[...router2.tierMap.keys()].join(", ")}]`
+      );
+    }
+    return router2;
+  } catch (err) {
+    console.warn(
+      "[ProviderRouter] Failed to parse MIXED_PROVIDERS_CONFIG, falling back to single-provider mode:",
+      err.message
+    );
+    return null;
+  }
+}
+
 // ../../index.js
 var import_meta = {};
 var packageVersion = "0.0.0";
@@ -33960,6 +34189,7 @@ var models = {
 var ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || "2023-06-01";
 var ANTHROPIC_BETA = process.env.ANTHROPIC_BETA;
 var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY";
+var router = createRouterFromEnv(process.env, endpointKindOverrides);
 var FALLBACK_XML_MODELS = [
   "inclusionai/ling-1t",
   "z-ai/glm-4.6",
@@ -34084,7 +34314,10 @@ console.log(`[Startup] - Completion Model: ${models.completion}`);
 console.log(`[Startup] - API Key: ${key ? "present" : "MISSING"}`);
 console.log(`[Startup] - API Key Source: ${keySource || "none"}`);
 console.log(`[Startup] - Debug Mode: ${process.env.DEBUG ? "enabled" : "disabled"}`);
-if (models.reasoning !== models.completion) {
+if (router) {
+  console.log("[Startup] - Mixed-provider mode: ACTIVE");
+  console.log(`[Startup] - Router: ${JSON.stringify(router.toDebugObject())}`);
+} else if (models.reasoning !== models.completion) {
   console.log("[Startup] - Two-model mode detected");
 } else {
   console.log("[Startup] - Single-model mode");
@@ -34275,7 +34508,8 @@ async function healthCheckHandler(request, reply) {
       currentCompletion: models.completion || "not set"
     },
     timestamp: Date.now(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    mixedProviders: router ? router.toDebugObject() : null
   };
   if (!isReady) {
     healthResponse.missingKey = true;
@@ -34472,27 +34706,43 @@ fastify.post("/v1/messages", async (request, reply) => {
     const requestStartMs = Date.now();
     let firstChunkLogged = false;
     let ttfbMs = null;
-    const negotiationError = await ensureEndpointKindReady();
-    if (negotiationError) {
-      reply.code(negotiationError.statusCode);
-      return negotiationError.body;
+    let routedContext = null;
+    if (router && payload.model) {
+      const resolved = router.resolve(payload.model);
+      if (resolved) {
+        routedContext = resolved.context;
+        console.log(`[Mixed Router] Model "${payload.model}" \u2192 tier "${resolved.tier}" \u2192 provider "${routedContext.providerId}" (${routedContext.endpointKind})`);
+      } else {
+        console.log(`[Mixed Router] Model "${payload.model}" not in tier map, falling back to default provider`);
+      }
     }
-    const isAnthropicNative = endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
-    if (!key) {
+    const effectiveProvider = routedContext?.providerId || provider;
+    const effectiveBaseUrl = routedContext?.baseUrl || normalizedBaseUrl;
+    const effectiveKey = routedContext?.key || key;
+    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind;
+    if (!routedContext) {
+      const negotiationError = await ensureEndpointKindReady();
+      if (negotiationError) {
+        reply.code(negotiationError.statusCode);
+        return negotiationError.body;
+      }
+    }
+    const isAnthropicNative = effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
+    if (!effectiveKey) {
       reply.code(400);
-      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${provider === "deepseek" ? "Deepseek" : provider === "glm" ? "GLM" : provider} API Key) or set the correct env var (${provider === "deepseek" ? "DEEPSEEK_API_KEY" : provider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : "API_KEY"}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${provider === "openrouter" ? "OpenRouter" : provider} API key in the extension settings.`;
+      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === "deepseek" ? "Deepseek" : effectiveProvider === "glm" ? "GLM" : effectiveProvider} API Key) or set the correct env var (${effectiveProvider === "deepseek" ? "DEEPSEEK_API_KEY" : effectiveProvider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : "API_KEY"}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === "openrouter" ? "OpenRouter" : effectiveProvider} API key in the extension settings.`;
       return {
         error: {
-          message: `No API key found for provider "${provider}". Checked ${KEY_ENV_HINT}.`,
+          message: `No API key found for provider "${effectiveProvider}". Checked ${KEY_ENV_HINT}.`,
           type: "missing_api_key",
           hint
         }
       };
     }
-    const requestUrl = isAnthropicNative ? `${normalizedBaseUrl}/v1/messages` : `${normalizedBaseUrl}/v1/chat/completions`;
-    const headers = buildUpstreamHeaders({ provider, endpointKind, key });
+    const requestUrl = isAnthropicNative ? `${effectiveBaseUrl}/v1/messages` : `${effectiveBaseUrl}/v1/chat/completions`;
+    const headers = routedContext ? routedContext.getHeaders() : buildUpstreamHeaders({ provider, endpointKind, key });
     if (isAnthropicNative) {
-      console.log(`[Anthropic Native] Handling request for provider: ${provider}`);
+      console.log(`[Anthropic Native] Handling request for provider: ${effectiveProvider}`);
       console.log(`[Anthropic Native] Forwarding to: ${requestUrl}`);
       console.log(`[Anthropic Native] Authentication: x-api-key header injected`);
     }
@@ -34521,7 +34771,7 @@ fastify.post("/v1/messages", async (request, reply) => {
         }
         console.error("[Anthropic Error]", {
           status: upstreamResponse.status,
-          provider,
+          effectiveProvider,
           messageCount: Array.isArray(payload?.messages) ? payload.messages.length : 0,
           error: errorJson.error?.message?.slice?.(0, 200) || errorDetails.slice(0, 200)
         });
@@ -34685,7 +34935,7 @@ fastify.post("/v1/messages", async (request, reply) => {
     }));
     const responseWarnings = [];
     const selectedModel = payload.model || (payload.thinking ? models.reasoning : models.completion);
-    const toolStyle = getModelToolStyle(selectedModel, provider);
+    const toolStyle = getModelToolStyle(selectedModel, effectiveProvider);
     const preferJsonTools = toolStyle === "json";
     if (toolStyle) {
       console.log(`[Tool Style] ${selectedModel} matched toolStyle=${toolStyle}`);
@@ -34706,15 +34956,15 @@ fastify.post("/v1/messages", async (request, reply) => {
     } else {
       console.log(`[Model] Using requested model: ${selectedModel}`);
     }
-    const supportsToolCalling = modelSupportsToolCalling(selectedModel, provider);
+    const supportsToolCalling = modelSupportsToolCalling(selectedModel, effectiveProvider);
     let shouldDropTools = false;
-    if (provider === "openrouter" && tools.length > 0 && !supportsToolCalling) {
+    if (effectiveProvider === "openrouter" && tools.length > 0 && !supportsToolCalling) {
       console.warn(`[Tool Capability] Model ${selectedModel} does not support tool calling. Stripping tools and tool_choice.`);
       shouldDropTools = true;
       responseWarnings.push(`Tool calling is unavailable for ${selectedModel}; the proxy converted available tools into plain instructions.`);
     }
     const enableJsonTools = !shouldDropTools && preferJsonTools && tools.length > 0;
-    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, provider);
+    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider);
     const messagesWithXML = needsXMLTools ? injectXMLToolInstructions(messages, tools) : messages;
     const openaiPayload = {
       model: selectedModel,
@@ -34726,7 +34976,7 @@ fastify.post("/v1/messages", async (request, reply) => {
     if (!shouldDropTools && !needsXMLTools && tools.length > 0) {
       openaiPayload.tools = tools;
       if (payload.tool_choice) {
-        if (provider === "openrouter" && typeof payload.tool_choice === "object" && payload.tool_choice.type === "auto") {
+        if (effectiveProvider === "openrouter" && typeof payload.tool_choice === "object" && payload.tool_choice.type === "auto") {
           openaiPayload.tool_choice = "auto";
         } else {
           openaiPayload.tool_choice = payload.tool_choice;
@@ -34735,7 +34985,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       if (enableJsonTools) {
         openaiPayload.parallel_tool_calls = false;
         if (!openaiPayload.tool_choice) {
-          openaiPayload.tool_choice = provider === "openrouter" ? "auto" : { type: "auto" };
+          openaiPayload.tool_choice = effectiveProvider === "openrouter" ? "auto" : { type: "auto" };
         }
       }
     } else if (shouldDropTools && tools.length > 0) {
@@ -34751,7 +35001,7 @@ ${toolInstructions}`;
       openaiPayload.messages = messagesWithXML;
       console.log(`[Tool Capability] Injected text-based tool instructions for ${selectedModel}`);
     }
-    if (provider === "grok") {
+    if (effectiveProvider === "grok") {
       let agentCount = GROK_AGENT_COUNTS.low;
       if (payload.thinking === true) {
         agentCount = GROK_AGENT_COUNTS.high;
@@ -34855,7 +35105,7 @@ ${toolInstructions}`;
       console.error("[OpenRouter Error]", {
         status: openaiResponse.status,
         model: "[REDACTED]",
-        provider,
+        effectiveProvider,
         messageCount: messages.length,
         toolCount: tools.length,
         error: errorJson.error?.message || errorDetails.substring(0, 200)
@@ -34899,7 +35149,7 @@ ${toolInstructions}`;
       }
       const choice = data.choices[0];
       const openaiMessage = choice.message;
-      if (provider === "grok" && selectedModel.includes("multi-agent")) {
+      if (effectiveProvider === "grok" && selectedModel.includes("multi-agent")) {
         openaiMessage.content = stripPgpBlocks(openaiMessage.content);
       }
       const stopReason = mapStopReason(choice.finish_reason);
@@ -35011,7 +35261,7 @@ ${toolInstructions}`;
                 }
                 chunkBuffer = "";
               }
-              if (provider === "grok" && selectedModel.includes("multi-agent")) {
+              if (effectiveProvider === "grok" && selectedModel.includes("multi-agent")) {
                 accumulatedContent = stripPgpBlocks(accumulatedContent);
               }
               const trimmedContent = accumulatedContent.trim();

@@ -286,7 +286,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             break
           case 'requestModels':
             // Phase 2: Pass through token for race protection
-            await this.handleListModels(false, msg.token)
+            // Phase 3b: Provide requested provider from message
+            await this.handleListModels(false, msg.token, msg.provider)
             break
           case 'requestPopularModels':
             await this.postPopularModels()
@@ -582,9 +583,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleListModels(freeOnly: boolean, requestToken?: string) {
-    // Use runtimeProvider for UI operations - this represents the actual provider being used
-    const provider = this.runtimeProvider || 'openrouter'
+  private async handleListModels(freeOnly: boolean, requestToken?: string, requestedProvider?: string) {
+    // Use requestedProvider (for Phase 3b) or fallback to runtimeProvider 
+    const provider = requestedProvider || this.runtimeProvider || 'openrouter'
     
     // Comment 4: Generate sequence token if not provided, increment counter
     let sequenceToken: string
@@ -2071,11 +2072,27 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
     <main class="main-content">
       <div class="content-grid">
-        <!-- Provider Configuration Card -->
-        <div class="card">
-          <h2 class="card-title">Provider</h2>
+        <div class="card provider-card">
+          <h2 class="card-title" id="providerCardTitle">Provider</h2>
+          <!-- KHA-267: Tabbed Provider Header -->
+          <div id="providerTabBar" style="display: none; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--vscode-widget-border); margin-bottom: 8px; padding-bottom: 0;">
+            <button class="provider-tab active" id="providerTab-primary" data-tab="primary" style="padding: 6px 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background)); border: 1px solid var(--vscode-widget-border); border-bottom: 2px solid var(--vscode-focusBorder); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); font-family: inherit; margin: 0; position: relative; bottom: -1px;">
+              Provider
+            </button>
+            <button class="provider-tab" id="providerTab-1" data-tab="1" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
+              Provider 2
+              <span class="tab-close" data-close="1" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+            </button>
+            <button class="provider-tab" id="providerTab-2" data-tab="2" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
+              Provider 3
+              <span class="tab-close" data-close="2" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+            </button>
+            <button id="addProviderTabBtn" style="display: none; padding: 6px 10px; font-size: 13px; font-weight: 600; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-textLink-foreground); font-family: inherit; margin: 0; position: relative;" title="Add another provider">
+              +
+            </button>
+          </div>
           
-          <div class="form-group">
+          <div class="form-group" style="margin-top: 8px;">
             <select class="form-select" id="providerSelect">
               <!-- Built-in providers will be populated dynamically -->
             </select>
@@ -2155,10 +2172,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
               <input type="checkbox" id="mixedProvidersCheckbox">
               <label for="mixedProvidersCheckbox">Mix Providers</label>
               <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
-                Route each model tier (Opus/Sonnet/Haiku) to a different API provider
-              </div>
-              <div id="mixedProvidersStatus" style="margin-left: 20px; margin-top: 4px; font-size: 11px; display: none;">
-                <span style="color: var(--vscode-charts-green);">● Mixed mode active</span>
+                Route each model tier to a different API provider
               </div>
             </div>
 
@@ -2166,6 +2180,21 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
               <div id="reasoningModelDisplay" style="margin-bottom: 4px;"></div>
               <div id="codingModelDisplay" style="margin-bottom: 4px;"></div>
               <div id="valueModelDisplay"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Model List Card -->
+        <div class="card model-list-card">
+          <h2 class="card-title" id="modelListTitle">Filter Models</h2>
+          
+          <div class="model-list-header">
+            <input class="model-search" type="text" id="modelSearch" placeholder="Filter models...">
+          </div>
+
+          <div id="modelListContainer" class="model-list">
+            <div class="loading-container">
+              <span class="loading-spinner"></span>Loading models...
             </div>
           </div>
         </div>
@@ -2216,20 +2245,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
           </div>
         </details>
 
-        <!-- Model List Card -->
-        <div class="card model-list-card">
-          <h2 class="card-title" id="modelListTitle">Filter Models</h2>
-          
-          <div class="model-list-header">
-            <input class="model-search" type="text" id="modelSearch" placeholder="Filter models...">
-          </div>
 
-          <div id="modelListContainer" class="model-list">
-            <div class="loading-container">
-              <span class="loading-spinner"></span>Loading models...
-            </div>
-          </div>
-        </div>
       </div>
     </main>
 

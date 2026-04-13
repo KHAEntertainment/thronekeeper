@@ -573,10 +573,9 @@
         value: enabled
       });
 
-      // Update status indicator
-      const statusEl = document.getElementById('mixedProvidersStatus');
-      if (statusEl) {
-        statusEl.style.display = enabled ? 'block' : 'none';
+      // Show/hide mixed providers UI dynamically
+      if (typeof updateMixedProvidersUI === 'function') {
+        updateMixedProvidersUI();
       }
     });
 
@@ -915,6 +914,11 @@
             type: 'updateProvider',
       provider: state.provider 
     });
+
+    // KHA-267: Update mixed-provider tab when switching providers on a secondary tab
+    if (typeof onProviderChangeForMixedTab === 'function') {
+      onProviderChangeForMixedTab();
+    }
   }
 
   /**
@@ -1776,9 +1780,15 @@
    * @param {Object} keys - Mapping of provider IDs to stored key presence (truthy value indicates a stored key). May include a top-level `anthropic` entry.
    */
   function handleKeysLoaded(keys) {
+    state.keyStatus = keys || {};
     console.log('[handleKeysLoaded] Keys status received:', keys);
     console.log('[handleKeysLoaded] Current provider in state:', state.provider);
     console.log('[handleKeysLoaded] Key status for current provider:', keys[state.provider]);
+    
+    // Also update mixed provider UI badges
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
+    }
     
     // Update UI to show if key is stored
     const input = document.getElementById('apiKeyInput');
@@ -1880,6 +1890,11 @@
     if (mixedProvidersSection) {
       mixedProvidersSection.style.display = state.twoModelMode ? 'block' : 'none';
     }
+    
+    // Phase 3b: Ensure UI blocks toggle appropriately
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
+    }
   }
 
   function updateSaveComboButton() {
@@ -1957,13 +1972,16 @@
     if (type === 'reasoning') {
       state.reasoningModel = modelId;
       normalized.reasoning = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.reasoning = state.provider;
     } else if (type === 'coding') {
       state.codingModel = modelId;
       // Comment 3: Map 'coding' to 'completion' canonical key
       normalized.completion = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.completion = state.provider;
     } else if (type === 'value') {
       state.valueModel = modelId;
       normalized.value = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.value = state.provider;
     }
     
     // Comment 3: Save normalized map back (ensures canonical keys only)
@@ -1992,6 +2010,11 @@
     updateSaveComboButton();
     updateSelectedModelsDisplay();
     saveState();
+    
+    if (state.featureFlags.enableMixedProviders) {
+      saveMixedState();
+    }
+    
     // Immediately re-render model list to update highlighting - state is already updated synchronously above
     renderModelList();
     // handleModelsSaved will also call renderModelList() as a safety net after backend confirmation
@@ -2920,6 +2943,42 @@
     if (mixedProvidersCheckbox) {
       mixedProvidersCheckbox.checked = mixedProvidersEnabled;
     }
+    
+    // Restore mixed tabs from saved config
+    if (state.mixedProviders && state.mixedProviders.enabled) {
+      const providersInConfig = [
+        state.mixedProviders.reasoning?.providerId,
+        state.mixedProviders.completion?.providerId,
+        state.mixedProviders.value?.providerId
+      ].filter(Boolean);
+      
+      const uniqueProviders = [...new Set(providersInConfig)];
+      
+      const secondaryProviders = uniqueProviders.filter(pid => pid !== state.provider);
+      
+      mixedTabState.providerIds['primary'] = state.provider;
+      
+      if (secondaryProviders.length > 0) {
+        mixedTabState.tabCount = Math.min(2, secondaryProviders.length);
+        for (let i = 0; i < mixedTabState.tabCount; i++) {
+          const tabId = String(i + 1);
+          mixedTabState.providerIds[tabId] = secondaryProviders[i];
+          const tabBtn = document.getElementById(`providerTab-${tabId}`);
+          if (tabBtn) {
+            tabBtn.style.display = 'inline-block';
+            if (typeof updateTabLabel === 'function') updateTabLabel(tabId);
+          }
+        }
+      }
+      
+      // Restore assignments
+      state.mixedTierAssignments = {
+        reasoning: state.mixedProviders.reasoning?.providerId || state.provider,
+        completion: state.mixedProviders.completion?.providerId || state.provider,
+        value: state.mixedProviders.value?.providerId || state.provider
+      };
+    }
+    
     // Show/hide mixed providers section and status
     const mixedProvidersSection = document.getElementById('mixedProvidersSection');
     if (mixedProvidersSection) {
@@ -2927,7 +2986,10 @@
     }
     const mixedProvidersStatus = document.getElementById('mixedProvidersStatus');
     if (mixedProvidersStatus) {
-      mixedProvidersStatus.style.display = (mixedProvidersEnabled && state.mixedProviders?.enabled) ? 'block' : 'none';
+      mixedProvidersStatus.style.display = 'none'; // Replaced by distinct UI cards
+    }
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
     }
 
     // Update selected models display
@@ -3078,6 +3140,8 @@
       'together': 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo, mistralai/Mixtral-8x7B-Instruct-v0.1, Qwen/Qwen2.5-72B-Instruct-Turbo',
       'deepseek': 'deepseek-chat, deepseek-coder',
       'glm': 'glm-4-plus, glm-4',
+      'minimax': 'MiniMax-M2.7, MiniMax-M2.7-highspeed',
+      'kimi': 'kimi-for-coding',
       'custom': 'gpt-4, claude-3-opus, llama-3'
     };
     
@@ -3224,4 +3288,266 @@
     
     // Could add a toast notification here with structuredPayload.error
   }
+
+  // ==========================================
+  // Phase 3b: Tabbed Mixed Providers UI Logic
+  // ==========================================
+
+  // Track state for secondary provider tabs
+  const mixedTabState = {
+    activeTab: 'primary', // Which tab is currently shown
+    tabCount: 0,          // 0 = no secondary tabs, 1 = Provider 2, 2 = Provider 2+3
+    providerIds: {
+      'primary': '',
+      '1': '',
+      '2': ''
+    }
+  };
+
+  // Tracks which provider is assigned to which tier for mixed mode
+  state.mixedTierAssignments = {
+    reasoning: '',
+    completion: '',
+    value: ''
+  };
+
+  function updateMixedProvidersUI() {
+    const tabBar = document.getElementById('providerTabBar');
+    const addBtn = document.getElementById('addProviderTabBtn');
+    const checkbox = document.getElementById('mixedProvidersCheckbox');
+    const providerCardTitle = document.getElementById('providerCardTitle');
+    
+    const flagEnabled = state.featureFlags.enableMixedProviders;
+    const mixedActive = state.twoModelMode && flagEnabled && checkbox?.checked;
+
+    if (tabBar) {
+      tabBar.style.display = flagEnabled ? 'flex' : 'none';
+      if (providerCardTitle) providerCardTitle.style.display = flagEnabled ? 'none' : 'block';
+    }
+
+    // Update [+] button visibility
+    if (addBtn) {
+      addBtn.style.display = (flagEnabled && mixedTabState.tabCount < 2) ? 'inline-block' : 'none';
+    }
+
+    // Restore primary tab view if mixed mode just got disabled
+    if (!mixedActive && !flagEnabled && mixedTabState.activeTab !== 'primary') {
+      switchToTab('primary');
+    }
+
+    updateTabKeyBadges();
+  }
+
+  function updateTabKeyBadges() {
+    // Redundant without the tier assignment blocks, but we can keep it around or ignore it safely.
+  }
+
+  function initMixedTabListeners() {
+    const addBtn = document.getElementById('addProviderTabBtn');
+    addBtn?.addEventListener('click', () => {
+      if (mixedTabState.tabCount >= 2) return;
+      
+      // Auto-enable mode UI if not already
+      const checkbox = document.getElementById('mixedProvidersCheckbox');
+      const threeToggle = document.getElementById('threeModelToggle');
+      if (checkbox && !checkbox.checked) {
+        checkbox.checked = true;
+      }
+      if (threeToggle && !threeToggle.checked) {
+        threeToggle.checked = true;
+        state.twoModelMode = true;
+        updateTwoModelUI();
+      }
+
+      mixedTabState.tabCount++;
+      const tabId = String(mixedTabState.tabCount);
+      const tabBtn = document.getElementById(`providerTab-${tabId}`);
+      if (tabBtn) tabBtn.style.display = 'inline-block';
+      
+      if (addBtn) {
+        addBtn.style.display = mixedTabState.tabCount < 2 ? 'inline-block' : 'none';
+      }
+
+      switchToTab(tabId);
+    });
+
+    document.querySelectorAll('.provider-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.classList?.contains('tab-close')) return;
+        const tabId = btn.getAttribute('data-tab');
+        if (tabId) switchToTab(tabId);
+      });
+    });
+
+    document.querySelectorAll('.tab-close').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const closeId = btn.getAttribute('data-close');
+        if (closeId) removeTab(closeId);
+      });
+    });
+  }
+
+  function switchToTab(tabId) {
+    if (mixedTabState.activeTab !== tabId) {
+       mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    }
+    
+    mixedTabState.activeTab = tabId;
+
+    document.querySelectorAll('.provider-tab').forEach(t => {
+      const tId = t.getAttribute('data-tab');
+      const isActive = tId === tabId;
+      t.style.background = isActive ? 'var(--vscode-button-secondaryBackground, var(--vscode-editor-background))' : 'var(--vscode-input-background)';
+      t.style.borderBottom = isActive ? '2px solid var(--vscode-focusBorder)' : '1px solid var(--vscode-widget-border)';
+      t.style.color = isActive ? 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))' : 'var(--vscode-descriptionForeground)';
+    });
+
+    // Handle provider selection for this tab
+    let providerId = mixedTabState.providerIds[tabId];
+    if (!providerId) {
+      providerId = state.provider;
+      mixedTabState.providerIds[tabId] = providerId;
+    }
+
+    const providerSelect = document.getElementById('providerSelect');
+    if (providerSelect) providerSelect.value = providerId;
+    
+    // Switch to the correct provider and models
+    state.provider = providerId;
+    
+    const provMaps = state.modelsByProvider[providerId] || {};
+    state.reasoningModel = provMaps.reasoning || '';
+    state.codingModel = provMaps.completion || '';
+    state.valueModel = provMaps.value || '';
+
+    if (state.modelsCache[providerId]) {
+      state.models = state.modelsCache[providerId];
+      renderModelList();
+    } else {
+      loadModels();
+    }
+    
+    updateTabLabel(tabId);
+  }
+
+  function updateTabLabel(tabId) {
+    if (tabId === 'primary') return;
+    const tabBtn = document.getElementById(`providerTab-${tabId}`);
+    if (!tabBtn) return;
+
+    let label = `Provider ${parseInt(tabId) + 1}`;
+    const pid = mixedTabState.providerIds[tabId] || state.provider;
+    if (pid && providers[pid]) {
+      label = providers[pid].name;
+    } else if (pid && state.customProviders) {
+      const cp = state.customProviders.find(p => p.id === pid);
+      if (cp) label = cp.name;
+    }
+    
+    const closeSpan = tabBtn.querySelector('.tab-close');
+    tabBtn.textContent = label + ' ';
+    if (closeSpan) tabBtn.appendChild(closeSpan);
+  }
+
+  function removeTab(tabId) {
+    const tabBtn = document.getElementById(`providerTab-${tabId}`);
+    if (tabBtn) tabBtn.style.display = 'none';
+
+    mixedTabState.providerIds[tabId] = '';
+
+    if (mixedTabState.activeTab === tabId) {
+      switchToTab('primary');
+    }
+
+    if (tabId === '1' && mixedTabState.tabCount === 2) {
+      mixedTabState.providerIds['1'] = mixedTabState.providerIds['2'];
+      mixedTabState.providerIds['2'] = '';
+      
+      const tab2Btn = document.getElementById('providerTab-2');
+      if (tab2Btn) tab2Btn.style.display = 'none';
+      
+      const tab1Btn = document.getElementById('providerTab-1');
+      if (tab1Btn) {
+        tab1Btn.style.display = 'inline-block';
+        updateTabLabel('1');
+      }
+    }
+
+    mixedTabState.tabCount = Math.max(0, mixedTabState.tabCount - 1);
+
+    const addBtn = document.getElementById('addProviderTabBtn');
+    if (addBtn) addBtn.style.display = 'inline-block';
+
+    saveMixedState();
+  }
+
+  function saveMixedState() {
+    if (!state.featureFlags.enableMixedProviders) return;
+
+    // Use assignments if present, otherwise fallback to primary provider
+    const pID = mixedTabState.providerIds['primary'] || state.provider;
+    const rProvider = state.mixedTierAssignments.reasoning || pID;
+    const cProvider = state.mixedTierAssignments.completion || pID;
+    const vProvider = state.mixedTierAssignments.value || pID;
+
+    const tierMap = {
+      reasoning: { providerId: rProvider, model: state.modelsByProvider[rProvider]?.reasoning || '' },
+      completion: { providerId: cProvider, model: state.modelsByProvider[cProvider]?.completion || '' },
+      value: { providerId: vProvider, model: state.modelsByProvider[vProvider]?.value || '' }
+    };
+
+    const mixedConfig = {
+      enabled: mixedTabState.tabCount > 0,
+      reasoning: buildTierPayload(tierMap.reasoning),
+      completion: buildTierPayload(tierMap.completion),
+      value: buildTierPayload(tierMap.value)
+    };
+
+    state.mixedProviders = mixedConfig;
+
+    vscode.postMessage({
+      type: 'saveMixedProviders',
+      ...mixedConfig
+    });
+  }
+
+  function buildTierPayload(tierInfo) {
+    const pid = tierInfo.providerId || 'openrouter';
+    let endpointKind = 'openai';
+    if (providers[pid]) {
+      if (pid === 'anthropic' || pid === 'bedrock') endpointKind = 'anthropic';
+    } else if (state.customProviders) {
+      const custom = state.customProviders.find(p => p.id === pid);
+      if (custom?.endpointKind) endpointKind = custom.endpointKind;
+    }
+    
+    let baseUrl = '';
+    if (state.customProviders) {
+      const custom = state.customProviders.find(p => p.id === pid);
+      if (custom?.baseUrl) baseUrl = custom.baseUrl;
+    }
+
+
+    return {
+      providerId: pid,
+      model: tierInfo.model || '',
+      displayModel: tierInfo.model || '',
+      baseUrl,
+      endpointKind
+    };
+  }
+
+  // Hook the provider change into secondary tab tracking
+  function onProviderChangeForMixedTab() {
+    if (!state.featureFlags.enableMixedProviders) return;
+    
+    mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    updateTabLabel(mixedTabState.activeTab);
+    updateTabKeyBadges();
+    saveMixedState();
+  }
+
+  // Initialize on DOM ready
+  initMixedTabListeners();
 })();

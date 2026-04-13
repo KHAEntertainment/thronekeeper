@@ -5,16 +5,17 @@
  * These schemas enforce contracts between the webview (main.js) and extension (PanelViewProvider.ts)
  * to prevent race conditions, stale data rendering, and configuration mismatches.
  *
- * Schema Version: 1.0.0
- * Last Updated: 2025-10-31
+ * Schema Version: 1.1.0
+ * Last Updated: 2026-04-12
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebviewToExtensionMessageSchema = exports.OpenExternalMessageSchema = exports.SimpleUpdateMessageSchema = exports.SimpleRequestMessageSchema = exports.DeleteCustomProviderMessageSchema = exports.SaveCustomProviderMessageSchema = exports.DeleteComboMessageSchema = exports.SaveComboMessageSchema = exports.ToggleOpusPlanMessageSchema = exports.ToggleTwoModelModeMessageSchema = exports.ToggleThreeModelModeMessageSchema = exports.RevertApplyMessageSchema = exports.StopProxyMessageSchema = exports.ProxyControlMessageSchema = exports.StoreKeyMessageSchema = exports.UpdateProviderMessageSchema = exports.SaveModelsMessageSchema = exports.RequestModelsMessageSchema = exports.ExtensionToWebviewMessageSchema = exports.ErrorMessageSchema = exports.ErrorMessagePayloadSchema = exports.CustomProvidersLoadedMessageSchema = exports.CombosLoadedMessageSchema = exports.ModelsSavedMessageSchema = exports.KeyStoredMessageSchema = exports.KeysLoadedMessageSchema = exports.PopularModelsMessageSchema = exports.ConfigLoadedMessageSchema = exports.ModelsLoadedMessageSchema = exports.StatusMessageSchema = exports.ModelComboSchema = exports.CustomProviderSchema = exports.ProviderMapSchema = exports.ModelInfoSchema = void 0;
+exports.WebviewToExtensionMessageSchema = exports.OpenExternalMessageSchema = exports.SimpleUpdateMessageSchema = exports.SimpleRequestMessageSchema = exports.DeleteCustomProviderMessageSchema = exports.SaveCustomProviderMessageSchema = exports.DeleteComboMessageSchema = exports.SaveComboMessageSchema = exports.SaveMixedProvidersMessageSchema = exports.ToggleOpusPlanMessageSchema = exports.ToggleTwoModelModeMessageSchema = exports.ToggleThreeModelModeMessageSchema = exports.RevertApplyMessageSchema = exports.StopProxyMessageSchema = exports.ProxyControlMessageSchema = exports.StoreKeyMessageSchema = exports.UpdateProviderMessageSchema = exports.SaveModelsMessageSchema = exports.RequestModelsMessageSchema = exports.ExtensionToWebviewMessageSchema = exports.ErrorMessageSchema = exports.ErrorMessagePayloadSchema = exports.CustomProvidersLoadedMessageSchema = exports.CombosLoadedMessageSchema = exports.ModelsSavedMessageSchema = exports.KeyStoredMessageSchema = exports.KeysLoadedMessageSchema = exports.PopularModelsMessageSchema = exports.ConfigLoadedMessageSchema = exports.ModelsLoadedMessageSchema = exports.StatusMessageSchema = exports.ModelComboSchema = exports.CustomProviderSchema = exports.ProviderMapSchema = exports.ModelInfoSchema = void 0;
 exports.normalizeMessageType = normalizeMessageType;
 exports.validateExtensionMessage = validateExtensionMessage;
 exports.validateWebviewMessage = validateWebviewMessage;
 exports.safeValidateMessage = safeValidateMessage;
 const zod_1 = require("zod");
+const config_1 = require("./config");
 // ============================================================================
 // Legacy Message Type Normalization
 // ============================================================================
@@ -144,7 +145,9 @@ exports.ConfigLoadedMessageSchema = zod_1.z.object({
         completionModel: zod_1.z.string().optional(),
         valueModel: zod_1.z.string().optional(),
         // Feature flags for webview behavior
-        featureFlags: zod_1.z.any().optional()
+        featureFlags: zod_1.z.any().optional(),
+        // KHA-267: Mixed provider configuration
+        mixedProviders: config_1.MixedProviderConfigSchema.optional().nullable(),
     })
 });
 /**
@@ -325,6 +328,17 @@ exports.ToggleOpusPlanMessageSchema = zod_1.z.object({
     enabled: zod_1.z.boolean()
 });
 /**
+ * KHA-267: Save mixed provider configuration
+ * Sent when user configures per-tier provider bindings in mixed mode.
+ */
+exports.SaveMixedProvidersMessageSchema = zod_1.z.object({
+    type: zod_1.z.literal('saveMixedProviders'),
+    enabled: zod_1.z.boolean(),
+    reasoning: config_1.TierProviderBindingSchema,
+    completion: config_1.TierProviderBindingSchema,
+    value: config_1.TierProviderBindingSchema,
+});
+/**
  * Save combo message
  */
 exports.SaveComboMessageSchema = zod_1.z.object({
@@ -397,7 +411,7 @@ exports.SimpleUpdateMessageSchema = zod_1.z.discriminatedUnion('type', [
     zod_1.z.object({
         // KHA-269: Feature flag update message
         type: zod_1.z.literal('updateFeatureFlag'),
-        flag: zod_1.z.enum(['enableAgentTeams']),
+        flag: zod_1.z.enum(['enableAgentTeams', 'enableMixedProviders']),
         value: zod_1.z.boolean()
     })
 ]);
@@ -420,6 +434,7 @@ exports.WebviewToExtensionMessageSchema = zod_1.z.union([
     exports.ToggleThreeModelModeMessageSchema,
     exports.ToggleTwoModelModeMessageSchema,
     exports.ToggleOpusPlanMessageSchema,
+    exports.SaveMixedProvidersMessageSchema,
     exports.SaveComboMessageSchema,
     exports.DeleteComboMessageSchema,
     exports.SaveCustomProviderMessageSchema,
