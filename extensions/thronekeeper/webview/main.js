@@ -47,8 +47,11 @@
     enableTokenValidation: true,
     enableKeyNormalization: true,
     enablePreApplyHydration: true,
-    enableAgentTeams: false // KHA-269: Agent Teams feature flag
+    enableAgentTeams: false, // KHA-269: Agent Teams feature flag
+    enableMixedProviders: false // KHA-267: Mixed provider mode
   },
+  // KHA-267: Mixed provider configuration
+  mixedProviders: null,
   // Comment 2: Error telemetry buffer
   errorBuffer: [], // In-memory buffer of recent errors
   maxErrorBufferSize: 10, // Keep last 10 errors
@@ -556,6 +559,25 @@
         flag: 'enableAgentTeams',
         value: enabled
       });
+    });
+
+    // KHA-267: Mixed Providers Checkbox
+    const mixedProvidersCheckbox = document.getElementById('mixedProvidersCheckbox');
+    mixedProvidersCheckbox?.addEventListener('change', (e) => {
+      const enabled = !!e.target.checked;
+      state.featureFlags.enableMixedProviders = enabled;
+
+      vscode.postMessage({
+        type: 'updateFeatureFlag',
+        flag: 'enableMixedProviders',
+        value: enabled
+      });
+
+      // Update status indicator
+      const statusEl = document.getElementById('mixedProvidersStatus');
+      if (statusEl) {
+        statusEl.style.display = enabled ? 'block' : 'none';
+      }
     });
 
     // Model Search
@@ -1852,6 +1874,12 @@
     
     // Update OpusPlan UI when three-model mode changes
     updateOpusPlanUI();
+    
+    // KHA-267: Show/hide mixed providers section based on three-model mode
+    const mixedProvidersSection = document.getElementById('mixedProvidersSection');
+    if (mixedProvidersSection) {
+      mixedProvidersSection.style.display = state.twoModelMode ? 'block' : 'none';
+    }
   }
 
   function updateSaveComboButton() {
@@ -2882,6 +2910,24 @@
     state.featureFlags.enableAgentTeams = agentTeamsEnabled;
     if (agentTeamsCheckbox) {
       agentTeamsCheckbox.checked = agentTeamsEnabled;
+    }
+
+    // KHA-267: Set Mixed Providers checkbox state
+    const mixedProvidersCheckbox = document.getElementById('mixedProvidersCheckbox');
+    const mixedProvidersEnabled = Boolean(config.featureFlags?.enableMixedProviders ?? false);
+    state.featureFlags.enableMixedProviders = mixedProvidersEnabled;
+    state.mixedProviders = config.mixedProviders || null;
+    if (mixedProvidersCheckbox) {
+      mixedProvidersCheckbox.checked = mixedProvidersEnabled;
+    }
+    // Show/hide mixed providers section and status
+    const mixedProvidersSection = document.getElementById('mixedProvidersSection');
+    if (mixedProvidersSection) {
+      mixedProvidersSection.style.display = state.twoModelMode ? 'block' : 'none';
+    }
+    const mixedProvidersStatus = document.getElementById('mixedProvidersStatus');
+    if (mixedProvidersStatus) {
+      mixedProvidersStatus.style.display = (mixedProvidersEnabled && state.mixedProviders?.enabled) ? 'block' : 'none';
     }
 
     // Update selected models display

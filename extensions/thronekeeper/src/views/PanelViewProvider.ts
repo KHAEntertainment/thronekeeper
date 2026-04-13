@@ -390,6 +390,10 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
           case 'updateFeatureFlag':
             await this.handleUpdateFeatureFlag(msg.flag, msg.value)
             break
+          case 'saveMixedProviders':
+            // KHA-267: Handle mixed-provider configuration save
+            await this.handleSaveMixedProviders(msg)
+            break
           default:
             this.log.appendLine(`Unknown message type received: ${msg.type}`)
         }
@@ -550,7 +554,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         completionModel,
         valueModel,
         // Comment 19: Send feature flags to webview
-        featureFlags
+        featureFlags,
+        // KHA-267: Mixed provider configuration
+        mixedProviders: config.get<any>('mixedProviders', null)
       }
     });
   }
@@ -1958,7 +1964,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       this.log.appendLine(`[handleUpdateFeatureFlag] Rejected non-boolean value for ${flag}: ${JSON.stringify(value)}`)
       return
     }
-    const KNOWN_FLAGS = ['enableAgentTeams']
+    const KNOWN_FLAGS = ['enableAgentTeams', 'enableMixedProviders']
     if (!KNOWN_FLAGS.includes(flag)) {
       this.log.appendLine(`[handleUpdateFeatureFlag] Unknown flag: ${flag}`)
       return
@@ -1991,6 +1997,51 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     }
 
     this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} updated to ${value}`)
+  }
+
+  /**
+   * KHA-267: Handle saving mixed-provider configuration.
+   * Persists per-tier provider bindings to VS Code settings.
+   */
+  private async handleSaveMixedProviders(msg: any) {
+    const cfg = vscode.workspace.getConfiguration('claudeThrone')
+    const applyScope = cfg.get<string>('applyScope', 'workspace')
+    const target = this.getConfigurationTarget(applyScope)
+
+    const mixedConfig = {
+      enabled: msg.enabled,
+      reasoning: {
+        providerId: msg.reasoning.providerId,
+        baseUrl: msg.reasoning.baseUrl,
+        model: msg.reasoning.model,
+        displayModel: msg.reasoning.displayModel,
+        endpointKind: msg.reasoning.endpointKind,
+      },
+      completion: {
+        providerId: msg.completion.providerId,
+        baseUrl: msg.completion.baseUrl,
+        model: msg.completion.model,
+        displayModel: msg.completion.displayModel,
+        endpointKind: msg.completion.endpointKind,
+      },
+      value: {
+        providerId: msg.value.providerId,
+        baseUrl: msg.value.baseUrl,
+        model: msg.value.model,
+        displayModel: msg.value.displayModel,
+        endpointKind: msg.value.endpointKind,
+      },
+    }
+
+    this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=${msg.enabled}`)
+    this.log.appendLine(`[handleSaveMixedProviders] reasoning=${msg.reasoning.providerId}/${msg.reasoning.model}`)
+    this.log.appendLine(`[handleSaveMixedProviders] completion=${msg.completion.providerId}/${msg.completion.model}`)
+    this.log.appendLine(`[handleSaveMixedProviders] value=${msg.value.providerId}/${msg.value.model}`)
+
+    await cfg.update('mixedProviders', mixedConfig, target)
+
+    this.log.appendLine(`[handleSaveMixedProviders] ✅ Mixed provider config saved`)
+    this.postConfig()
   }
 
   private getHtml(): string {
@@ -2097,6 +2148,17 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
               <label for="agentTeamsCheckbox">Enable Agent Teams</label>
               <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
                 Enable Claude Agent Teams for multi-agent swarm collaboration
+              </div>
+            </div>
+
+            <div class="two-model-toggle" style="margin-left: 20px; margin-top: 8px;" id="mixedProvidersSection">
+              <input type="checkbox" id="mixedProvidersCheckbox">
+              <label for="mixedProvidersCheckbox">Mix Providers</label>
+              <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
+                Route each model tier (Opus/Sonnet/Haiku) to a different API provider
+              </div>
+              <div id="mixedProvidersStatus" style="margin-left: 20px; margin-top: 4px; font-size: 11px; display: none;">
+                <span style="color: var(--vscode-charts-green);">● Mixed mode active</span>
               </div>
             </div>
 
