@@ -7,8 +7,8 @@ import { ProviderMapSchema } from './messages'
  * These schemas enforce contracts for VS Code configuration settings
  * and ensure consistency between workspace/global scopes.
  * 
- * Schema Version: 1.0.0
- * Last Updated: 2025-10-28
+ * Schema Version: 1.1.0
+ * Last Updated: 2026-04-12
  */
 
 // ============================================================================
@@ -42,6 +42,39 @@ export type ConfigurationTarget = z.infer<typeof ConfigurationTargetSchema>
 export const CustomEndpointKindSchema = z.enum(['auto', 'openai', 'anthropic'])
 
 export type CustomEndpointKind = z.infer<typeof CustomEndpointKindSchema>
+
+// ============================================================================
+// KHA-267: Mixed Provider Types
+// ============================================================================
+
+/**
+ * Per-tier provider binding — maps a single tier to a specific provider + model.
+ * Used in mixed-provider mode to allow each model tier (Opus/Sonnet/Haiku) to
+ * route to a different upstream API provider.
+ */
+export const TierProviderBindingSchema = z.object({
+  providerId: z.string(),      // e.g., 'glm', 'minimax', 'kimi', 'custom'
+  baseUrl: z.string(),         // Upstream base URL for this provider
+  model: z.string(),           // Model ID at the upstream provider (without namespace)
+  displayModel: z.string().optional(),  // Namespaced display name (e.g., 'glm/glm-5.1')
+  endpointKind: z.enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native']).optional(),
+})
+
+export type TierProviderBinding = z.infer<typeof TierProviderBindingSchema>
+
+/**
+ * Mixed-provider configuration — enables per-tier provider routing.
+ * When enabled, each model tier (reasoning/completion/value) can be served by
+ * a different API provider with its own base URL, API key, and endpoint kind.
+ */
+export const MixedProviderConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  reasoning: TierProviderBindingSchema,
+  completion: TierProviderBindingSchema,
+  value: TierProviderBindingSchema,
+})
+
+export type MixedProviderConfig = z.infer<typeof MixedProviderConfigSchema>
 
 // ============================================================================
 // VS Code Configuration Schema
@@ -106,8 +139,12 @@ export const ClaudeThroneConfigSchema = z.object({
     enableKeyNormalization: z.boolean().default(true),
     enablePreApplyHydration: z.boolean().default(true),
     enableAnthropicDirectApply: z.boolean().default(false), // Comment 10: Gate deprecated feature
-    enableAgentTeams: z.boolean().default(false) // KHA-269: Agent Teams feature flag
-  }).optional()
+    enableAgentTeams: z.boolean().default(false), // KHA-269: Agent Teams feature flag
+    enableMixedProviders: z.boolean().default(false), // KHA-267: Mixed provider mode
+  }).optional(),
+  
+  // KHA-267: Mixed provider configuration (null = single-provider mode)
+  mixedProviders: MixedProviderConfigSchema.optional().nullable(),
 })
 
 export type ClaudeThroneConfig = z.infer<typeof ClaudeThroneConfigSchema>
@@ -272,6 +309,37 @@ export function checkConfigurationInvariants(
     if (!normalized.completion || !normalized.value) {
       violations.push(
         `Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`
+      )
+    }
+  }
+  
+  // Check 4 (KHA-267): Verify mixed-provider config consistency
+  if (config.mixedProviders?.enabled) {
+    const mp = config.mixedProviders
+    const tiers = ['reasoning', 'completion', 'value'] as const
+    for (const tier of tiers) {
+      const binding = mp[tier]
+      if (!binding?.providerId) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no providerId.`
+        )
+      }
+      if (!binding?.model) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no model.`
+        )
+      }
+      if (!binding?.baseUrl) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no baseUrl.`
+        )
+      }
+    }
+    
+    // Verify mixed mode requires twoModelMode to be enabled
+    if (!config.twoModelMode) {
+      violations.push(
+        `Mixed provider mode requires '3 Different Models' mode to be enabled.`
       )
     }
   }

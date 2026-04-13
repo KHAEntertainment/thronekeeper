@@ -594,13 +594,21 @@ export function activate(context: vscode.ExtensionContext) {
       const completionModel = cfg.get<string>('completionModel')
       const twoModelMode = cfg.get<boolean>('twoModelMode', false)
       
+      // KHA-267: Read mixed-provider configuration
+      const featureFlags = cfg.get<any>('featureFlags', {})
+      const mixedProviders = featureFlags.enableMixedProviders ? cfg.get<any>('mixedProviders', null) : null
+      
       log.appendLine(`[startProxy] Starting with config: provider=${provider}, port=${port}, twoModelMode=${twoModelMode}`)
       log.appendLine(`[startProxy] Models: reasoning=${reasoningModel}, completion=${completionModel}`)
+      if (mixedProviders?.enabled) {
+        log.appendLine(`[startProxy] Mixed provider mode: ACTIVE`)
+        log.appendLine(`[startProxy] Mixed config: ${JSON.stringify(mixedProviders)}`)
+      }
       
       // All providers (including Deepseek, GLM, and custom Anthropic endpoints) now route through the proxy
       // The proxy handles authentication and forwards requests to the appropriate provider URL
       
-      await proxy!.start({ provider, customBaseUrl, port, debug, reasoningModel, completionModel })
+      await proxy!.start({ provider, customBaseUrl, port, debug, reasoningModel, completionModel, mixedProviders })
       
       const elapsed = Date.now() - startTime
       log.appendLine(`[startProxy] Proxy started in ${elapsed}ms`)

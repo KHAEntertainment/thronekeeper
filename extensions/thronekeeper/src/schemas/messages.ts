@@ -4,11 +4,12 @@
  * These schemas enforce contracts between the webview (main.js) and extension (PanelViewProvider.ts)
  * to prevent race conditions, stale data rendering, and configuration mismatches.
  * 
- * Schema Version: 1.0.0
- * Last Updated: 2025-10-31
+ * Schema Version: 1.1.0
+ * Last Updated: 2026-04-12
  */
 
 import { z } from 'zod'
+import { TierProviderBindingSchema, MixedProviderConfigSchema } from './config'
 
 // ============================================================================
 // Legacy Message Type Normalization
@@ -164,7 +165,9 @@ export const ConfigLoadedMessageSchema = z.object({
     completionModel: z.string().optional(),
     valueModel: z.string().optional(),
     // Feature flags for webview behavior
-    featureFlags: z.any().optional()
+    featureFlags: z.any().optional(),
+    // KHA-267: Mixed provider configuration
+    mixedProviders: MixedProviderConfigSchema.optional().nullable(),
   })
 })
 
@@ -400,6 +403,20 @@ export const ToggleOpusPlanMessageSchema = z.object({
 export type ToggleOpusPlanMessage = z.infer<typeof ToggleOpusPlanMessageSchema>
 
 /**
+ * KHA-267: Save mixed provider configuration
+ * Sent when user configures per-tier provider bindings in mixed mode.
+ */
+export const SaveMixedProvidersMessageSchema = z.object({
+  type: z.literal('saveMixedProviders'),
+  enabled: z.boolean(),
+  reasoning: TierProviderBindingSchema,
+  completion: TierProviderBindingSchema,
+  value: TierProviderBindingSchema,
+})
+
+export type SaveMixedProvidersMessage = z.infer<typeof SaveMixedProvidersMessageSchema>
+
+/**
  * Save combo message
  */
 export const SaveComboMessageSchema = z.object({
@@ -485,7 +502,7 @@ export const SimpleUpdateMessageSchema = z.discriminatedUnion('type', [
   z.object({
     // KHA-269: Feature flag update message
     type: z.literal('updateFeatureFlag'),
-    flag: z.enum(['enableAgentTeams']),
+    flag: z.enum(['enableAgentTeams', 'enableMixedProviders']),
     value: z.boolean()
   })
 ])
@@ -514,6 +531,7 @@ export const WebviewToExtensionMessageSchema = z.union([
   ToggleThreeModelModeMessageSchema,
   ToggleTwoModelModeMessageSchema,
   ToggleOpusPlanMessageSchema,
+  SaveMixedProvidersMessageSchema,
   SaveComboMessageSchema,
   DeleteComboMessageSchema,
   SaveCustomProviderMessageSchema,

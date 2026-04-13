@@ -3,6 +3,7 @@ import * as cp from 'node:child_process'
 import * as path from 'node:path'
 import { SecretsService } from './Secrets'
 import { redactSecrets } from '../utils/redaction'
+import type { MixedProviderConfig } from '../schemas/config'
 
 export interface ProxyStartOptions {
   provider: 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'kimi' | 'minimax' | 'custom' | string
@@ -12,6 +13,8 @@ export interface ProxyStartOptions {
   debug?: boolean
   reasoningModel?: string
   completionModel?: string
+  // KHA-267: Mixed provider configuration
+  mixedProviders?: MixedProviderConfig | null
 }
 
 export interface ProxyStatus { running: boolean; port?: number; pid?: number }
@@ -473,6 +476,51 @@ export class ProxyManager {
           base.API_KEY = key
         }
         break
+      }
+    }
+
+    // KHA-267: Serialize mixed-provider config if enabled
+    if (opts.mixedProviders?.enabled) {
+      try {
+        const mp = opts.mixedProviders
+        const tiers = ['reasoning', 'completion', 'value'] as const
+        
+        // Collect unique provider IDs to resolve keys
+        const uniqueProviders = new Set<string>()
+        for (const tier of tiers) {
+          uniqueProviders.add(mp[tier].providerId)
+        }
+        
+        // Resolve keys for each unique provider (smart key validation)
+        const providerKeys = new Map<string, string>()
+        for (const pid of uniqueProviders) {
+          const key = await this.secrets.getProviderKey(pid)
+          if (key) {
+            providerKeys.set(pid, key)
+            this.log.appendLine(`[ProxyManager] Mixed provider key found for: ${pid}`)
+          } else {
+            this.log.appendLine(`[ProxyManager] WARNING: No key found for mixed provider: ${pid}`)
+          }
+        }
+        
+        // Build MIXED_PROVIDERS_CONFIG object
+        const mixedConfig: Record<string, any> = {}
+        for (const tier of tiers) {
+          const binding = mp[tier]
+          mixedConfig[tier] = {
+            providerId: binding.providerId,
+            baseUrl: binding.baseUrl,
+            key: providerKeys.get(binding.providerId) || null,
+            model: binding.model,
+            endpointKind: binding.endpointKind || undefined,
+          }
+        }
+        
+        base.MIXED_PROVIDERS_CONFIG = JSON.stringify(mixedConfig)
+        this.log.appendLine(`[ProxyManager] Mixed provider config serialized: ${uniqueProviders.size} unique providers`)
+        this.log.appendLine(`[ProxyManager] Mixed tiers: reasoning=${mp.reasoning.providerId}/${mp.reasoning.model}, completion=${mp.completion.providerId}/${mp.completion.model}, value=${mp.value.providerId}/${mp.value.model}`)
+      } catch (err) {
+        this.log.appendLine(`[ProxyManager] Failed to serialize mixed provider config: ${err}`)
       }
     }
 

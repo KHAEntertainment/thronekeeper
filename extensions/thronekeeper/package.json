@@ -373,6 +373,12 @@
             "default": {},
             "scope": "window",
             "markdownDescription": "Internal: Provider-specific model selections. Maps provider IDs to selected reasoning, completion, and value models. Managed automatically by the Thronekeeper panel. Do not edit manually."
+          },
+          "claudeThrone.mixedProviders": {
+            "type": ["object", "null"],
+            "default": null,
+            "scope": "window",
+            "markdownDescription": "Internal: Mixed-provider per-tier configuration (KHA-267). When set, each model tier (reasoning/completion/value) can route to a different API provider. Managed through the Thronekeeper panel. Do not edit manually."
           }
         }
       }
