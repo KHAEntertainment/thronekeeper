@@ -4,6 +4,7 @@ import { ProxyManager } from '../services/ProxyManager'
 import { listModels, type ProviderId } from '../services/Models'
 // Comment 2: Import schema validation for runtime message validation
 import { safeValidateMessage, normalizeMessageType, type ExtensionToWebviewMessage } from '../schemas/messages'
+import { MixedProviderConfigSchema } from '../schemas/config'
 
 export class PanelViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView
@@ -23,13 +24,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     if (applyScope === 'global') {
       return vscode.ConfigurationTarget.Global
     }
-    // Check if workspace is available before using Workspace target
-    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-      return vscode.ConfigurationTarget.Workspace
-    }
-    // Fall back to Global if no workspace is open
-    this.log.appendLine('[getConfigurationTarget] No workspace open, falling back to Global settings')
-    return vscode.ConfigurationTarget.Global
+    return vscode.ConfigurationTarget.Workspace
   }
 
   /**
@@ -755,6 +750,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       } else if (errorType === 'timeout') {
         // Comment 3: Use error message from Models.ts if it's a timeout
         errorMessage = err.message || 'Model list request timed out. You can enter model IDs manually.'
+      } else if (errorType === 'manual_entry') {
+        errorMessage = err.message || 'Enter model IDs manually for this provider.'
       }
       
       // Comment 6: Include trace ID in error payload (DEBUG mode only)
@@ -1351,6 +1348,28 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       const port = cfg.get<number>('proxy.port', 3000)
       const debug = cfg.get<boolean>('proxy.debug', false)
       const twoModelMode = cfg.get<boolean>('twoModelMode', false)
+      const featureFlags = cfg.get<any>('featureFlags', {})
+      const mixedProvidersRaw = featureFlags.enableMixedProviders ? cfg.get<any>('mixedProviders', null) : null
+      let mixedProviders = null
+      if (mixedProvidersRaw?.enabled) {
+        const parsed = MixedProviderConfigSchema.safeParse(mixedProvidersRaw)
+        if (!parsed.success) {
+          const errorMsg = `Invalid mixed-provider configuration: ${JSON.stringify(parsed.error.format())}`
+          this.log.appendLine(`[handleStartProxy] ERROR: ${errorMsg}`)
+          vscode.window.showWarningMessage(errorMsg)
+          this.post({
+            type: 'proxyError',
+            payload: {
+              provider: this.runtimeProvider || 'openrouter',
+              error: errorMsg,
+              errorType: 'config'
+            }
+          })
+          return
+        }
+        mixedProviders = parsed.data
+        this.log.appendLine(`[handleStartProxy] Mixed provider config enabled and validated`)
+      }
       
       // Read models from provider-specific configuration with detailed logging
       const modelSelectionsByProvider = cfg.get<any>('modelSelectionsByProvider', {})
@@ -1575,6 +1594,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         debug,
         reasoningModel,
         completionModel,
+        ...(mixedProviders && { mixedProviders }),
         ...(customBaseUrl && { customBaseUrl }),
         ...(customProviderId && { customProviderId })
       })
@@ -1676,10 +1696,10 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
   private async handleRevertApply() {
     try {
-      this.log.appendLine('[handleRevertApply] Reverting Claude Code settings to Anthropic defaults')
+      this.log.appendLine('[handleRevertApply] Reverting Claude Code settings to Claude Code defaults')
       await vscode.commands.executeCommand('claudeThrone.revertApply', { autoSelectFirstFolder: true })
       this.postStatus()
-      vscode.window.showInformationMessage('Reverted Claude Code settings to Anthropic defaults')
+      vscode.window.showInformationMessage('Reverted Claude Code settings to Claude Code defaults')
     } catch (err: any) {
       this.log.appendLine(`[handleRevertApply] Error: ${err}`)
       
@@ -1842,7 +1862,21 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     // Implementation depends on existing model data
   }
 
-  private async handleSetModelFromList(modelId: string, modelType: 'reasoning' | 'coding' | 'value') {
+  private async handleSetModelFromList(
+    modelIdOrPayload: string | { model?: string; modelId?: string; modelType?: 'reasoning' | 'coding' | 'value'; provider?: string },
+    maybeModelType?: 'reasoning' | 'coding' | 'value'
+  ) {
+    const payload = typeof modelIdOrPayload === 'object' && modelIdOrPayload !== null ? modelIdOrPayload : null
+    const modelId = payload ? String(payload.modelId || payload.model || '') : String(modelIdOrPayload || '')
+    const modelType = payload ? payload.modelType : maybeModelType
+    if (payload?.provider) {
+      this.currentProvider = payload.provider
+    }
+    if (!modelId || !modelType) {
+      this.log.appendLine(`[handleSetModelFromList] Missing modelId or modelType; skipping save`)
+      return
+    }
+
     const cfg = vscode.workspace.getConfiguration('claudeThrone')
     
     // Determine configuration target based on applyScope setting
@@ -2005,39 +2039,64 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
    * Persists per-tier provider bindings to VS Code settings.
    */
   private async handleSaveMixedProviders(msg: any) {
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+      this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed payload: expected object`)
+      return
+    }
+
     const cfg = vscode.workspace.getConfiguration('claudeThrone')
     const applyScope = cfg.get<string>('applyScope', 'workspace')
     const target = this.getConfigurationTarget(applyScope)
 
-    const mixedConfig = {
-      enabled: msg.enabled,
-      reasoning: {
-        providerId: msg.reasoning.providerId,
-        baseUrl: msg.reasoning.baseUrl,
-        model: msg.reasoning.model,
-        displayModel: msg.reasoning.displayModel,
-        endpointKind: msg.reasoning.endpointKind,
-      },
-      completion: {
-        providerId: msg.completion.providerId,
-        baseUrl: msg.completion.baseUrl,
-        model: msg.completion.model,
-        displayModel: msg.completion.displayModel,
-        endpointKind: msg.completion.endpointKind,
-      },
-      value: {
-        providerId: msg.value.providerId,
-        baseUrl: msg.value.baseUrl,
-        model: msg.value.model,
-        displayModel: msg.value.displayModel,
-        endpointKind: msg.value.endpointKind,
-      },
+    const hasTier = (tier: string) => {
+      const value = msg[tier]
+      return value && typeof value === 'object' && !Array.isArray(value)
+    }
+    const enabled = Boolean(msg.enabled)
+
+    if (enabled && (!hasTier('reasoning') || !hasTier('completion') || !hasTier('value'))) {
+      this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed enabled payload: missing tier objects`)
+      return
     }
 
-    this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=${msg.enabled}`)
-    this.log.appendLine(`[handleSaveMixedProviders] reasoning=${msg.reasoning.providerId}/${msg.reasoning.model}`)
-    this.log.appendLine(`[handleSaveMixedProviders] completion=${msg.completion.providerId}/${msg.completion.model}`)
-    this.log.appendLine(`[handleSaveMixedProviders] value=${msg.value.providerId}/${msg.value.model}`)
+    const fallbackTier = {
+      providerId: this.runtimeProvider || 'openrouter',
+      baseUrl: '',
+      model: '',
+      displayModel: '',
+      endpointKind: 'auto'
+    }
+
+    const buildTier = (tier: string) => {
+      const binding = hasTier(tier) ? msg[tier] : fallbackTier
+      return {
+        providerId: binding.providerId || fallbackTier.providerId,
+        baseUrl: binding.baseUrl || '',
+        model: binding.model || '',
+        displayModel: binding.displayModel || binding.model || '',
+        endpointKind: binding.endpointKind || 'auto',
+      }
+    }
+
+    const mixedConfig = {
+      enabled,
+      reasoning: buildTier('reasoning'),
+      completion: buildTier('completion'),
+      value: buildTier('value'),
+    }
+
+    if (enabled) {
+      const parsed = MixedProviderConfigSchema.safeParse(mixedConfig)
+      if (!parsed.success) {
+        this.log.appendLine(`[handleSaveMixedProviders] Rejected invalid mixed config: ${JSON.stringify(parsed.error.format())}`)
+        return
+      }
+    }
+
+    this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=${enabled}`)
+    this.log.appendLine(`[handleSaveMixedProviders] reasoning=${mixedConfig.reasoning.providerId}/${mixedConfig.reasoning.model}`)
+    this.log.appendLine(`[handleSaveMixedProviders] completion=${mixedConfig.completion.providerId}/${mixedConfig.completion.model}`)
+    this.log.appendLine(`[handleSaveMixedProviders] value=${mixedConfig.value.providerId}/${mixedConfig.value.model}`)
 
     await cfg.update('mixedProviders', mixedConfig, target)
 

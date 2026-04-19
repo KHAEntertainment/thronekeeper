@@ -272,6 +272,36 @@ describe('ProviderRouter', () => {
     expect(() => new ProviderRouter(null)).toThrow()
   })
 
+  it('throws on malformed tier bindings', () => {
+    expect(() => new ProviderRouter({
+      reasoning: {},
+      completion: baseMixedConfig.completion,
+      value: baseMixedConfig.value,
+    })).toThrow()
+
+    expect(() => new ProviderRouter({
+      reasoning: baseMixedConfig.reasoning,
+      completion: {},
+      value: baseMixedConfig.value,
+    })).toThrow()
+
+    expect(() => new ProviderRouter({
+      reasoning: baseMixedConfig.reasoning,
+      completion: baseMixedConfig.completion,
+      value: {},
+    })).toThrow()
+  })
+
+  it('rejects duplicate model IDs across tiers', () => {
+    const config = {
+      reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key', model: 'shared-model' },
+      completion: { providerId: 'minimax', baseUrl: 'https://api.minimax.io/anthropic', key: 'minimax-key', model: 'shared-model' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'kimi-key', model: 'kimi-k2.5' },
+    }
+
+    expect(() => new ProviderRouter(config)).toThrow(/assigned to multiple/)
+  })
+
   it('produces safe debug output', () => {
     const router = new ProviderRouter(baseMixedConfig)
     const debug = router.toDebugObject()
@@ -302,6 +332,53 @@ describe('createRouterFromEnv()', () => {
 
     expect(router).toBeNull()
     expect(consoleSpy).toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('returns null when MIXED_PROVIDERS_CONFIG fails validation', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const config = {
+      reasoning: { providerId: 'glm', key: 'k1', model: 'glm-5.1' },
+      completion: { providerId: 'minimax', baseUrl: 'https://api.minimax.io/anthropic', key: 'k2', model: 'minimax-m2.7' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'k3', model: 'kimi-k2.5' },
+    }
+
+    const router = createRouterFromEnv({ MIXED_PROVIDERS_CONFIG: JSON.stringify(config) })
+
+    expect(router).toBeNull()
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid MIXED_PROVIDERS_CONFIG'))
+    consoleSpy.mockRestore()
+  })
+
+  it('normalizes legacy coding tier to completion', () => {
+    const config = {
+      reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'k1', model: 'glm-5.1' },
+      coding: { providerId: 'minimax', baseUrl: 'https://api.minimax.io/anthropic', key: 'k2', model: 'minimax-m2.7' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'k3', model: 'kimi-k2.5' },
+    }
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const router = createRouterFromEnv({ MIXED_PROVIDERS_CONFIG: JSON.stringify(config) })
+
+    expect(router).not.toBeNull()
+    expect(router.resolve('minimax-m2.7').tier).toBe('completion')
+    consoleSpy.mockRestore()
+  })
+
+  it('uses the injected env debug flag for debug logging', () => {
+    const config = {
+      reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'k1', model: 'glm-5.1' },
+      completion: { providerId: 'minimax', baseUrl: 'https://api.minimax.io/anthropic', key: 'k2', model: 'minimax-m2.7' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'k3', model: 'kimi-k2.5' },
+    }
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    createRouterFromEnv({ MIXED_PROVIDERS_CONFIG: JSON.stringify(config), DEBUG: '1' })
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[ProviderRouter] Initialized:',
+      expect.stringContaining('"reasoning"')
+    )
     consoleSpy.mockRestore()
   })
 

@@ -394,7 +394,13 @@ export function buildUpstreamHeadersForContext(ctx, env = process.env) {
     return headers
   }
 
-  if (ctx.endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+  const kind = String(ctx.endpointKind || '').toLowerCase()
+  const isAnthropicNative =
+    kind === 'anthropic' ||
+    kind === 'anthropic-native' ||
+    kind === ENDPOINT_KIND.ANTHROPIC_NATIVE
+
+  if (isAnthropicNative) {
     headers['x-api-key'] = ctx.key
     headers['anthropic-version'] = env.ANTHROPIC_VERSION || '2023-06-01'
     if (env.ANTHROPIC_BETA) {

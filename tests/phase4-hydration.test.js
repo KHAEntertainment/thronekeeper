@@ -52,7 +52,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
     
     // Dynamic import after mocks are set up
     if (!PanelViewProvider) {
-      const module = await import('../extensions/claude-throne/out/views/PanelViewProvider.js')
+      const module = await import('../extensions/thronekeeper/src/views/PanelViewProvider.ts')
       PanelViewProvider = module.PanelViewProvider
     }
     
@@ -84,7 +84,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
     mockLog = vscode.window.createOutputChannel('test')
     
     provider = new PanelViewProvider(
-      {} as any, // ExtensionContext
+      {}, // ExtensionContext
       mockSecrets,
       mockProxy,
       mockLog
@@ -482,8 +482,6 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       expect(state.modelsCache.openrouter).toBeUndefined()
     })
   })
-})
-  
   describe('Comment 4: Feature Flags End-to-End', () => {
     it('loads feature flags from config', () => {
       const state = {

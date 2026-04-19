@@ -1,8 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ManualEntryError = void 0;
 exports.listModels = listModels;
 const undici_1 = require("undici");
 const endpoints_1 = require("./endpoints");
+class ManualEntryError extends Error {
+    constructor(provider) {
+        super(`${provider} does not expose a compatible model-list endpoint. Enter model IDs manually.`);
+        this.errorType = 'manual_entry';
+        this.name = 'ManualEntryError';
+    }
+}
+exports.ManualEntryError = ManualEntryError;
 /**
  * Fetches a JSON model list from the given URL with provider-aware timeouts, exponential backoff retries, and an overall time budget.
  *
@@ -227,10 +236,10 @@ async function listModels(provider, baseUrl, apiKey) {
     }
     // KHA-267: Endpoints that do not implement standard /v1/models JSON responses should trigger the Manual Entry UI
     if (provider === 'minimax') {
-        throw new Error('Minimax models must be entered manually.');
+        throw new ManualEntryError('Minimax');
     }
     if (provider === 'kimi') {
-        throw new Error('Kimi models must be entered manually.');
+        throw new ManualEntryError('Kimi');
     }
     // Comment 3: Track start time for overall budget tracking
     const startTime = Date.now();

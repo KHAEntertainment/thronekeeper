@@ -42,6 +42,7 @@ const Secrets_1 = require("./services/Secrets");
 const ProxyManager_1 = require("./services/ProxyManager");
 const PanelViewProvider_1 = require("./views/PanelViewProvider");
 const ClaudeSettings_1 = require("./services/ClaudeSettings");
+const config_1 = require("./schemas/config");
 let proxy = null;
 /**
  * Update a claudeThrone setting in VS Code with validation and structured fallback handling.
@@ -136,8 +137,10 @@ async function fetchAnthropicDefaults(secrets) {
         }
         const data = await response.body.json();
         const models = data.data || [];
-        // DEBUG: Log all raw model IDs before filtering
-        console.log(`[fetchAnthropicDefaults] All ${models.length} models from API:`, models.map((m) => m.id));
+        const debug = vscode.workspace.getConfiguration('claudeThrone').get('proxy.debug', false);
+        if (debug) {
+            console.log(`[fetchAnthropicDefaults] All ${models.length} models from API:`, models.map((m) => m.id));
+        }
         // Helper to select best model: prefer -latest alias, exclude -preview and other unstable suffixes
         const selectBestModel = (filtered, fallback) => {
             if (filtered.length === 0)
@@ -220,7 +223,7 @@ async function fetchAnthropicDefaults(secrets) {
         const authStatus = secrets ? (await secrets.getAnthropicKey() ? 'authenticated' : 'unauthenticated') : 'no secrets service';
         console.error(`[fetchAnthropicDefaults] Failed to fetch (${authStatus}):`, error);
         // Return hardcoded fallbacks if fetch fails
-        return { opus: 'claude-opus-4-6-latest', sonnet: 'claude-sonnet-4-6-latest', haiku: 'claude-haiku-4-5-latest' };
+        return { opus: 'claude-opus-4-6', sonnet: 'claude-sonnet-4-6', haiku: 'claude-haiku-4-5' };
     }
 }
 /**
@@ -504,7 +507,6 @@ function activate(context) {
     const storeAnthropicKey = vscode.commands.registerCommand('claudeThrone.storeAnthropicKey', async () => {
         await storeAnthropicKeyHelper(secrets);
     });
-    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeKimiKey, storeMinimaxKey, storeCustomKey, storeAnyKey, storeAnthropicKey);
     const refreshAnthropicDefaults = vscode.commands.registerCommand('claudeThrone.refreshAnthropicDefaults', async () => {
         try {
             const defaults = await fetchAnthropicDefaults(secrets);
@@ -547,7 +549,17 @@ function activate(context) {
             const twoModelMode = cfg.get('twoModelMode', false);
             // KHA-267: Read mixed-provider configuration
             const featureFlags = cfg.get('featureFlags', {});
-            const mixedProviders = featureFlags.enableMixedProviders ? cfg.get('mixedProviders', null) : null;
+            const mixedProvidersRaw = featureFlags.enableMixedProviders ? cfg.get('mixedProviders', null) : null;
+            let mixedProviders = null;
+            if (mixedProvidersRaw?.enabled) {
+                const parsed = config_1.MixedProviderConfigSchema.safeParse(mixedProvidersRaw);
+                if (!parsed.success) {
+                    const message = `Invalid mixed-provider configuration: ${JSON.stringify(parsed.error.format())}`;
+                    log.appendLine(`[startProxy] ${message}`);
+                    throw new Error(message);
+                }
+                mixedProviders = parsed.data;
+            }
             log.appendLine(`[startProxy] Starting with config: provider=${provider}, port=${port}, twoModelMode=${twoModelMode}`);
             log.appendLine(`[startProxy] Models: reasoning=${reasoningModel}, completion=${completionModel}`);
             if (mixedProviders?.enabled) {

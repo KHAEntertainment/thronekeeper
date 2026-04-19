@@ -12,7 +12,7 @@ const makeResponse = (status: number, bodyObj?: any) => {
 }
 
 // Mock undici at top level
-const mockRequest = vi.fn()
+const { mockRequest } = vi.hoisted(() => ({ mockRequest: vi.fn() }))
 vi.mock('undici', () => ({ request: mockRequest }))
 
 describe('Models.list: normalization and error handling', () => {
@@ -22,9 +22,7 @@ describe('Models.list: normalization and error handling', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.restoreAllMocks()
     vi.resetModules()
-    vi.doUnmock('undici')
   })
 
   it('normalizes OpenAI-style data[] for Deepseek', async () => {

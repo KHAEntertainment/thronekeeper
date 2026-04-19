@@ -11,12 +11,62 @@
 // CLI-ready: no VS Code dependencies. Accepts plain config objects.
 
 import {
-  detectProvider,
-  resolveApiKey,
   providerSpecificHeaders,
   inferEndpointKindSync,
   ENDPOINT_KIND,
 } from './key-resolver.js'
+
+const MIXED_TIERS = ['reasoning', 'completion', 'value']
+
+function normalizeEndpointKind(endpointKind) {
+  const kind = String(endpointKind || 'auto').toLowerCase()
+  if (kind === 'anthropic' || kind === 'anthropic-native') return 'anthropic'
+  if (kind === 'openai' || kind === 'openai-compatible') return 'openai'
+  return 'auto'
+}
+
+function normalizeMixedProviderConfig(input) {
+  const source = { ...input }
+  if (!source.completion && source.coding) {
+    source.completion = source.coding
+  }
+  delete source.coding
+
+  if (source.enabled === false) {
+    return { enabled: false }
+  }
+
+  const errors = []
+  const normalized = { enabled: source.enabled !== false }
+
+  for (const tier of MIXED_TIERS) {
+    const binding = source[tier]
+    if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+      errors.push(`${tier} must be an object`)
+      continue
+    }
+
+    const providerId = typeof binding.providerId === 'string' ? binding.providerId.trim() : ''
+    const baseUrl = typeof binding.baseUrl === 'string' ? binding.baseUrl.trim() : ''
+    const model = typeof binding.model === 'string' ? binding.model.trim() : ''
+
+    if (!providerId) errors.push(`${tier}.providerId must be a non-empty string`)
+    if (!baseUrl) errors.push(`${tier}.baseUrl must be a non-empty string`)
+    if (!model) errors.push(`${tier}.model must be a non-empty string`)
+
+    normalized[tier] = {
+      ...binding,
+      providerId,
+      baseUrl,
+      model,
+      endpointKind: normalizeEndpointKind(binding.endpointKind),
+    }
+  }
+
+  return errors.length > 0
+    ? { errors }
+    : normalized
+}
 
 /**
  * Fully self-contained provider state for a single tier.
@@ -49,13 +99,12 @@ export class ProviderContext {
     this.tier = tier
 
     // Resolve endpoint kind: explicit override > auto-detect
-    if (endpointKind) {
-      if (endpointKind === 'anthropic' || endpointKind === 'anthropic-native') {
+    const normalizedEndpointKind = normalizeEndpointKind(endpointKind)
+    if (normalizedEndpointKind !== 'auto') {
+      if (normalizedEndpointKind === 'anthropic') {
         this.endpointKind = ENDPOINT_KIND.ANTHROPIC_NATIVE
-      } else if (endpointKind === 'openai' || endpointKind === 'openai-compatible') {
+      } else if (normalizedEndpointKind === 'openai') {
         this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE
-      } else {
-        this.endpointKind = inferEndpointKindSync(providerId, baseUrl, endpointOverrides)
       }
     } else {
       this.endpointKind = inferEndpointKindSync(providerId, baseUrl, endpointOverrides)
@@ -146,30 +195,55 @@ export class ProviderRouter {
       )
     }
 
+    const validation = normalizeMixedProviderConfig(config)
+    if (validation.errors) {
+      throw new Error(`[ProviderRouter] Invalid config: ${validation.errors.join('; ')}`)
+    }
+
     this.contexts = {
       reasoning: new ProviderContext({
-        ...config.reasoning,
+        ...validation.reasoning,
         tier: 'reasoning',
         endpointOverrides,
       }),
       completion: new ProviderContext({
-        ...config.completion,
+        ...validation.completion,
         tier: 'completion',
         endpointOverrides,
       }),
       value: new ProviderContext({
-        ...config.value,
+        ...validation.value,
         tier: 'value',
         endpointOverrides,
       }),
     }
 
-    // Build model name → { tier, context } lookup
+    // Build model name → { tier, context } lookup.
     // The proxy sets these model names in .claude/settings.json, so they are authoritative
     this.tierMap = new Map()
+    this.normalizedTierMap = new Map()
     for (const [tier, ctx] of Object.entries(this.contexts)) {
       if (ctx.model) {
-        this.tierMap.set(ctx.model, { tier, context: ctx })
+        const normalizedModel = ctx.model.toLowerCase()
+        const existing = this.normalizedTierMap.get(normalizedModel)
+        if (existing) {
+          const existingContext = existing.context
+          const sameContext =
+            existingContext.providerId === ctx.providerId &&
+            existingContext.baseUrl === ctx.baseUrl &&
+            existingContext.endpointKind === ctx.endpointKind &&
+            existingContext.model === ctx.model
+
+          if (!sameContext || existing.tier !== tier) {
+            throw new Error(
+              `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+            )
+          }
+        }
+
+        const entry = { tier, context: ctx }
+        this.tierMap.set(ctx.model, entry)
+        this.normalizedTierMap.set(normalizedModel, entry)
       }
     }
   }
@@ -187,13 +261,7 @@ export class ProviderRouter {
     const exact = this.tierMap.get(modelName)
     if (exact) return exact
 
-    // Fallback: case-insensitive match
-    const lower = modelName.toLowerCase()
-    for (const [name, entry] of this.tierMap) {
-      if (name.toLowerCase() === lower) return entry
-    }
-
-    return null
+    return this.normalizedTierMap.get(modelName.toLowerCase()) || null
   }
 
   /**
@@ -265,7 +333,19 @@ export function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
   if (!raw) return null
 
   try {
-    const config = JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    const config = normalizeMixedProviderConfig(parsed)
+    if (config.enabled === false) {
+      console.log('[ProviderRouter] Mixed provider config disabled; using single-provider mode')
+      return null
+    }
+    if (config.errors) {
+      console.error(
+        `[ProviderRouter] Invalid MIXED_PROVIDERS_CONFIG: ${config.errors.join('; ')}`
+      )
+      return null
+    }
+
     const router = new ProviderRouter(config, endpointOverrides)
     const validation = router.validate()
 
@@ -278,7 +358,7 @@ export function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
       )
     }
 
-    if (process.env.DEBUG) {
+    if (env.DEBUG || env.debug) {
       console.log('[ProviderRouter] Initialized:', JSON.stringify(router.toDebugObject(), null, 2))
     } else {
       console.log(

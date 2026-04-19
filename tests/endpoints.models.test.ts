@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { getModelsEndpointForBase, isAnthropicEndpoint } from '../extensions/claude-throne/src/services/endpoints'
+import { getModelsEndpointForBase, isAnthropicEndpoint } from '../extensions/thronekeeper/src/services/endpoints'
 
 describe('Endpoint resolution: getModelsEndpointForBase()', () => {
   it('resolves Deepseek base to /v1/models', () => {

@@ -207,6 +207,7 @@ describe('Phase 5: UI Optimization Tests', () => {
   
   describe('Filter Input Performance', () => {
     it('debouncing reduces render calls during rapid typing', async () => {
+      vi.useFakeTimers();
       const renderCalls = [];
       
       function render(searchTerm) {
@@ -232,9 +233,10 @@ describe('Phase 5: UI Optimization Tests', () => {
       // Without debouncing: 4 renders
       // With debouncing: 1 render (only the last)
       
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await vi.advanceTimersByTimeAsync(200);
       expect(renderCalls.length).toBe(1);
       expect(renderCalls[0]).toBe('test');
+      vi.useRealTimers();
     });
     
     it('filters are applied correctly with debouncing', async () => {

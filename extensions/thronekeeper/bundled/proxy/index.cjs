@@ -33896,6 +33896,46 @@ function detectHighThinking(content) {
 }
 
 // ../../provider-router.js
+var MIXED_TIERS = ["reasoning", "completion", "value"];
+function normalizeEndpointKind(endpointKind2) {
+  const kind = String(endpointKind2 || "auto").toLowerCase();
+  if (kind === "anthropic" || kind === "anthropic-native") return "anthropic";
+  if (kind === "openai" || kind === "openai-compatible") return "openai";
+  return "auto";
+}
+function normalizeMixedProviderConfig(input) {
+  const source = { ...input };
+  if (!source.completion && source.coding) {
+    source.completion = source.coding;
+  }
+  delete source.coding;
+  if (source.enabled === false) {
+    return { enabled: false };
+  }
+  const errors = [];
+  const normalized = { enabled: source.enabled !== false };
+  for (const tier of MIXED_TIERS) {
+    const binding = source[tier];
+    if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+      errors.push(`${tier} must be an object`);
+      continue;
+    }
+    const providerId = typeof binding.providerId === "string" ? binding.providerId.trim() : "";
+    const baseUrl2 = typeof binding.baseUrl === "string" ? binding.baseUrl.trim() : "";
+    const model2 = typeof binding.model === "string" ? binding.model.trim() : "";
+    if (!providerId) errors.push(`${tier}.providerId must be a non-empty string`);
+    if (!baseUrl2) errors.push(`${tier}.baseUrl must be a non-empty string`);
+    if (!model2) errors.push(`${tier}.model must be a non-empty string`);
+    normalized[tier] = {
+      ...binding,
+      providerId,
+      baseUrl: baseUrl2,
+      model: model2,
+      endpointKind: normalizeEndpointKind(binding.endpointKind)
+    };
+  }
+  return errors.length > 0 ? { errors } : normalized;
+}
 var ProviderContext = class {
   /**
    * @param {object} config
@@ -33921,13 +33961,12 @@ var ProviderContext = class {
     this.key = key2;
     this.model = model2;
     this.tier = tier;
-    if (endpointKind2) {
-      if (endpointKind2 === "anthropic" || endpointKind2 === "anthropic-native") {
+    const normalizedEndpointKind = normalizeEndpointKind(endpointKind2);
+    if (normalizedEndpointKind !== "auto") {
+      if (normalizedEndpointKind === "anthropic") {
         this.endpointKind = ENDPOINT_KIND.ANTHROPIC_NATIVE;
-      } else if (endpointKind2 === "openai" || endpointKind2 === "openai-compatible") {
+      } else if (normalizedEndpointKind === "openai") {
         this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE;
-      } else {
-        this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
       }
     } else {
       this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
@@ -34002,27 +34041,45 @@ var ProviderRouter = class {
         "[ProviderRouter] Invalid config: must include reasoning, completion, and value tiers"
       );
     }
+    const validation = normalizeMixedProviderConfig(config);
+    if (validation.errors) {
+      throw new Error(`[ProviderRouter] Invalid config: ${validation.errors.join("; ")}`);
+    }
     this.contexts = {
       reasoning: new ProviderContext({
-        ...config.reasoning,
+        ...validation.reasoning,
         tier: "reasoning",
         endpointOverrides
       }),
       completion: new ProviderContext({
-        ...config.completion,
+        ...validation.completion,
         tier: "completion",
         endpointOverrides
       }),
       value: new ProviderContext({
-        ...config.value,
+        ...validation.value,
         tier: "value",
         endpointOverrides
       })
     };
     this.tierMap = /* @__PURE__ */ new Map();
+    this.normalizedTierMap = /* @__PURE__ */ new Map();
     for (const [tier, ctx] of Object.entries(this.contexts)) {
       if (ctx.model) {
-        this.tierMap.set(ctx.model, { tier, context: ctx });
+        const normalizedModel = ctx.model.toLowerCase();
+        const existing = this.normalizedTierMap.get(normalizedModel);
+        if (existing) {
+          const existingContext = existing.context;
+          const sameContext = existingContext.providerId === ctx.providerId && existingContext.baseUrl === ctx.baseUrl && existingContext.endpointKind === ctx.endpointKind && existingContext.model === ctx.model;
+          if (!sameContext || existing.tier !== tier) {
+            throw new Error(
+              `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+            );
+          }
+        }
+        const entry = { tier, context: ctx };
+        this.tierMap.set(ctx.model, entry);
+        this.normalizedTierMap.set(normalizedModel, entry);
       }
     }
   }
@@ -34036,11 +34093,7 @@ var ProviderRouter = class {
     if (!modelName) return null;
     const exact = this.tierMap.get(modelName);
     if (exact) return exact;
-    const lower = modelName.toLowerCase();
-    for (const [name, entry] of this.tierMap) {
-      if (name.toLowerCase() === lower) return entry;
-    }
-    return null;
+    return this.normalizedTierMap.get(modelName.toLowerCase()) || null;
   }
   /**
    * Get the ProviderContext for a specific tier directly.
@@ -34096,7 +34149,18 @@ function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
   const raw = env.MIXED_PROVIDERS_CONFIG;
   if (!raw) return null;
   try {
-    const config = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const config = normalizeMixedProviderConfig(parsed);
+    if (config.enabled === false) {
+      console.log("[ProviderRouter] Mixed provider config disabled; using single-provider mode");
+      return null;
+    }
+    if (config.errors) {
+      console.error(
+        `[ProviderRouter] Invalid MIXED_PROVIDERS_CONFIG: ${config.errors.join("; ")}`
+      );
+      return null;
+    }
     const router2 = new ProviderRouter(config, endpointOverrides);
     const validation = router2.validate();
     if (!validation.valid) {
@@ -34107,7 +34171,7 @@ function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
         "[ProviderRouter] Mixed provider mode requires stored keys for all unique providers."
       );
     }
-    if (process.env.DEBUG) {
+    if (env.DEBUG || env.debug) {
       console.log("[ProviderRouter] Initialized:", JSON.stringify(router2.toDebugObject(), null, 2));
     } else {
       console.log(
@@ -34123,6 +34187,269 @@ function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
     return null;
   }
 }
+
+// ../../transformers.js
+var TransformerRegistry = class {
+  constructor() {
+    this.transformers = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Register a transformer by name
+   * @param {string} name - Transformer name
+   * @param {object} transformer - Object with transform/reverseTransform functions
+   */
+  register(name, transformer) {
+    if (!transformer.transform || typeof transformer.transform !== "function") {
+      throw new Error(`Transformer ${name} must export a transform function`);
+    }
+    if (!transformer.reverseTransform || typeof transformer.reverseTransform !== "function") {
+      throw new Error(`Transformer ${name} must export a reverseTransform function`);
+    }
+    this.transformers.set(name, transformer);
+  }
+  /**
+   * Get a transformer by name
+   * @param {string} name - Transformer name
+   * @returns {object|null} Transformer object or null if not found
+   */
+  get(name) {
+    return this.transformers.get(name) || null;
+  }
+  /**
+   * Check if a transformer is registered
+   * @param {string} name - Transformer name
+   * @returns {boolean}
+   */
+  has(name) {
+    return this.transformers.has(name);
+  }
+};
+async function applyTransformers(transformerConfigs, data, registry) {
+  let result = data;
+  for (const config of transformerConfigs) {
+    const [name, options] = Array.isArray(config) ? config : [config, {}];
+    const transformer = registry.get(name);
+    if (!transformer) {
+      console.error(`[Transformer] Transformer '${name}' not found in registry, skipping`);
+      continue;
+    }
+    try {
+      result = await transformer.transform(result, options);
+    } catch (error) {
+      console.error(`[Transformer] Error in ${name}.transform():`, error);
+    }
+  }
+  return result;
+}
+async function applyReverseTransformers(transformerConfigs, data, registry) {
+  let result = data;
+  for (let i = transformerConfigs.length - 1; i >= 0; i--) {
+    const config = transformerConfigs[i];
+    const [name, options] = Array.isArray(config) ? config : [config, {}];
+    const transformer = registry.get(name);
+    if (!transformer) {
+      console.error(`[Transformer] Transformer '${name}' not found in registry, skipping`);
+      continue;
+    }
+    try {
+      result = await transformer.reverseTransform(result, options);
+    } catch (error) {
+      console.error(`[Transformer] Error in ${name}.reverseTransform():`, error);
+    }
+  }
+  return result;
+}
+
+// ../../transformers/tooluse.js
+async function transform(request, options = {}) {
+  if (request.tools && Array.isArray(request.tools) && request.tools.length > 0) {
+    if (!request.tool_choice) {
+      request.tool_choice = { type: "auto" };
+    }
+  }
+  return request;
+}
+async function reverseTransform(response, options = {}) {
+  return response;
+}
+var tooluse_default = {
+  transform,
+  reverseTransform
+};
+
+// ../../transformers/reasoning.js
+async function transform2(request, options = {}) {
+  return request;
+}
+async function reverseTransform2(response, options = {}) {
+  if (response.type === "content_block_delta") {
+    if (response.delta?.reasoning) {
+      const { reasoning, ...restDelta } = response.delta;
+      return {
+        type: "content_block_delta",
+        index: response.index,
+        delta: {
+          ...restDelta,
+          type: "thinking_delta",
+          thinking: reasoning
+        }
+      };
+    }
+    if (response.delta?.reasoning_content) {
+      const { reasoning_content, ...restDelta } = response.delta;
+      return {
+        type: "content_block_delta",
+        index: response.index,
+        delta: {
+          ...restDelta,
+          type: "thinking_delta",
+          thinking: reasoning_content
+        }
+      };
+    }
+  }
+  if (response.type === "content_block_start") {
+    if (response.content_block?.reasoning) {
+      const { reasoning, ...restBlock } = response.content_block;
+      return {
+        type: "content_block_start",
+        index: response.index,
+        content_block: {
+          ...restBlock,
+          type: "thinking",
+          thinking: reasoning
+        }
+      };
+    }
+    if (response.content_block?.reasoning_content) {
+      const { reasoning_content, ...restBlock } = response.content_block;
+      return {
+        type: "content_block_start",
+        index: response.index,
+        content_block: {
+          ...restBlock,
+          type: "thinking",
+          thinking: reasoning_content
+        }
+      };
+    }
+  }
+  if (response.content && Array.isArray(response.content)) {
+    response.content = response.content.map((block) => {
+      if (block.reasoning) {
+        const { reasoning, ...rest } = block;
+        return {
+          ...rest,
+          type: "thinking",
+          thinking: reasoning
+        };
+      }
+      if (block.reasoning_content) {
+        const { reasoning_content, ...rest } = block;
+        return {
+          ...rest,
+          type: "thinking",
+          thinking: reasoning_content
+        };
+      }
+      return block;
+    });
+  }
+  return response;
+}
+var reasoning_default = {
+  transform: transform2,
+  reverseTransform: reverseTransform2
+};
+
+// ../../transformers/maxtoken.js
+async function transform3(request, options = {}) {
+  const configuredMaxTokens = options.max_tokens;
+  if (configuredMaxTokens) {
+    if (!request.max_tokens) {
+      request.max_tokens = configuredMaxTokens;
+    } else {
+      if (request.max_tokens > configuredMaxTokens) {
+        request.max_tokens = configuredMaxTokens;
+      }
+    }
+  }
+  return request;
+}
+async function reverseTransform3(response, options = {}) {
+  return response;
+}
+var maxtoken_default = {
+  transform: transform3,
+  reverseTransform: reverseTransform3
+};
+
+// ../../transformers/enhancetool.js
+async function transform4(request, options = {}) {
+  if (request.tools && Array.isArray(request.tools)) {
+    request.tools = request.tools.map((tool) => {
+      if (!tool.input_schema) {
+        tool.input_schema = {
+          type: "object",
+          properties: {},
+          required: []
+        };
+      }
+      if (!tool.input_schema.properties) {
+        tool.input_schema.properties = {};
+      }
+      if (!Array.isArray(tool.input_schema.required)) {
+        tool.input_schema.required = [];
+      }
+      return tool;
+    });
+  }
+  return request;
+}
+async function reverseTransform4(response, options = {}) {
+  if (response.type === "content_block_delta" && response.delta?.type === "input_json_delta") {
+    return response;
+  }
+  if (response.type === "tool_use" && response.input) {
+    try {
+      if (typeof response.input === "string") {
+        response.input = JSON.parse(response.input);
+      }
+      if (typeof response.input !== "object" || response.input === null) {
+        console.error("[Transformer:enhancetool] Invalid tool input, using empty object:", response.input);
+        response.input = {};
+      }
+    } catch (error) {
+      console.error("[Transformer:enhancetool] Failed to parse tool input:", error);
+      response.input = {};
+    }
+    return response;
+  }
+  if (response.content && Array.isArray(response.content)) {
+    response.content = response.content.map((block) => {
+      if (block.type === "tool_use" && block.input) {
+        try {
+          if (typeof block.input === "string") {
+            block.input = JSON.parse(block.input);
+          }
+          if (typeof block.input !== "object" || block.input === null) {
+            console.error("[Transformer:enhancetool] Invalid tool input, using empty object:", block.input);
+            block.input = {};
+          }
+        } catch (error) {
+          console.error("[Transformer:enhancetool] Failed to parse tool input:", error);
+          block.input = {};
+        }
+      }
+      return block;
+    });
+  }
+  return response;
+}
+var enhancetool_default = {
+  transform: transform4,
+  reverseTransform: reverseTransform4
+};
 
 // ../../index.js
 var import_meta = {};
@@ -34190,6 +34517,11 @@ var ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || "2023-06-01";
 var ANTHROPIC_BETA = process.env.ANTHROPIC_BETA;
 var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY";
 var router = createRouterFromEnv(process.env, endpointKindOverrides);
+var transformerRegistry = new TransformerRegistry();
+transformerRegistry.register("tooluse", tooluse_default);
+transformerRegistry.register("reasoning", reasoning_default);
+transformerRegistry.register("maxtoken", maxtoken_default);
+transformerRegistry.register("enhancetool", enhancetool_default);
 var FALLBACK_XML_MODELS = [
   "inclusionai/ling-1t",
   "z-ai/glm-4.6",
@@ -34268,6 +34600,25 @@ function getModelToolStyle(modelName, providerId) {
     }
   }
   return null;
+}
+function getModelTransformers(modelName, providerId) {
+  if (!modelName || !providerId) return [];
+  const config = modelCapabilities?.transformers || null;
+  if (!config) return [];
+  const providerConfig = config[providerId] || {};
+  const fallbackProviderConfigs = providerId === "custom" ? Object.entries(config).filter(([key2]) => key2 !== "*" && key2 !== providerId).flatMap(([, value]) => Object.entries(value || {})) : [];
+  const entries = [
+    ...Object.entries(config["*"] || {}),
+    ...fallbackProviderConfigs,
+    ...Object.entries(providerConfig)
+  ];
+  const matched = [];
+  for (const [pattern, transformerConfigs] of entries) {
+    if (matchesPattern(modelName, pattern) && Array.isArray(transformerConfigs)) {
+      matched.push(...transformerConfigs);
+    }
+  }
+  return matched;
 }
 function parseNativeToolResponse(openaiMessage, options = {}) {
   const blocks = [];
@@ -34402,7 +34753,9 @@ function buildUpstreamHeaders({ provider: providerId, endpointKind: upstreamKind
   if (!apiKey) {
     return headers;
   }
-  if (upstreamKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+  const normalizedKind = String(upstreamKind || "").toLowerCase();
+  const isAnthropicNative = normalizedKind === ENDPOINT_KIND.ANTHROPIC_NATIVE || normalizedKind === "anthropic" || normalizedKind === "anthropic-native";
+  if (isAnthropicNative) {
     headers["x-api-key"] = apiKey;
     headers["anthropic-version"] = ANTHROPIC_VERSION;
     if (ANTHROPIC_BETA) {
@@ -34713,13 +35066,18 @@ fastify.post("/v1/messages", async (request, reply) => {
         routedContext = resolved.context;
         console.log(`[Mixed Router] Model "${payload.model}" \u2192 tier "${resolved.tier}" \u2192 provider "${routedContext.providerId}" (${routedContext.endpointKind})`);
       } else {
-        console.log(`[Mixed Router] Model "${payload.model}" not in tier map, falling back to default provider`);
+        reply.code(400);
+        return {
+          error: {
+            type: "invalid_model",
+            message: `Model "${payload.model}" is not configured in MIXED_PROVIDERS_CONFIG`
+          }
+        };
       }
     }
     const effectiveProvider = routedContext?.providerId || provider;
     const effectiveBaseUrl = routedContext?.baseUrl || normalizedBaseUrl;
     const effectiveKey = routedContext?.key || key;
-    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind;
     if (!routedContext) {
       const negotiationError = await ensureEndpointKindReady();
       if (negotiationError) {
@@ -34727,7 +35085,9 @@ fastify.post("/v1/messages", async (request, reply) => {
         return negotiationError.body;
       }
     }
-    const isAnthropicNative = effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
+    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind;
+    const normalizedEffectiveEndpointKind = String(effectiveEndpointKind || "").toLowerCase();
+    const isAnthropicNative = normalizedEffectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE || normalizedEffectiveEndpointKind === "anthropic" || normalizedEffectiveEndpointKind === "anthropic-native";
     if (!effectiveKey) {
       reply.code(400);
       const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === "deepseek" ? "Deepseek" : effectiveProvider === "glm" ? "GLM" : effectiveProvider} API Key) or set the correct env var (${effectiveProvider === "deepseek" ? "DEEPSEEK_API_KEY" : effectiveProvider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : "API_KEY"}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === "openrouter" ? "OpenRouter" : effectiveProvider} API key in the extension settings.`;
@@ -34740,7 +35100,11 @@ fastify.post("/v1/messages", async (request, reply) => {
       };
     }
     const requestUrl = isAnthropicNative ? `${effectiveBaseUrl}/v1/messages` : `${effectiveBaseUrl}/v1/chat/completions`;
-    const headers = routedContext ? routedContext.getHeaders() : buildUpstreamHeaders({ provider, endpointKind, key });
+    const headers = buildUpstreamHeaders({
+      provider: effectiveProvider,
+      endpointKind: effectiveEndpointKind,
+      key: effectiveKey
+    });
     if (isAnthropicNative) {
       console.log(`[Anthropic Native] Handling request for provider: ${effectiveProvider}`);
       console.log(`[Anthropic Native] Forwarding to: ${requestUrl}`);
@@ -34876,7 +35240,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       }
       return;
     }
-    if (endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+    if (effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
       console.error("[Guard Violation] Anthropic-native endpoint reached OpenAI conversion path - this should not happen");
       reply.code(500);
       return { error: { message: "Internal error: endpoint kind mismatch", type: "internal_error" } };
@@ -34936,6 +35300,11 @@ fastify.post("/v1/messages", async (request, reply) => {
     const responseWarnings = [];
     const selectedModel = payload.model || (payload.thinking ? models.reasoning : models.completion);
     const toolStyle = getModelToolStyle(selectedModel, effectiveProvider);
+    const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider);
+    const hasTooluseTransformer = transformerConfigs.some((config) => {
+      const name = Array.isArray(config) ? config[0] : config;
+      return name === "tooluse";
+    });
     const preferJsonTools = toolStyle === "json";
     if (toolStyle) {
       console.log(`[Tool Style] ${selectedModel} matched toolStyle=${toolStyle}`);
@@ -34964,7 +35333,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       responseWarnings.push(`Tool calling is unavailable for ${selectedModel}; the proxy converted available tools into plain instructions.`);
     }
     const enableJsonTools = !shouldDropTools && preferJsonTools && tools.length > 0;
-    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider);
+    const needsXMLTools = !shouldDropTools && !hasTooluseTransformer && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider);
     const messagesWithXML = needsXMLTools ? injectXMLToolInstructions(messages, tools) : messages;
     const openaiPayload = {
       model: selectedModel,
@@ -35022,7 +35391,8 @@ ${toolInstructions}`;
         agent_count: agentCount
       };
     }
-    debug("OpenAI payload:", openaiPayload);
+    const transformedOpenaiPayload = transformerConfigs.length > 0 ? await applyTransformers(transformerConfigs, openaiPayload, transformerRegistry) : openaiPayload;
+    debug("OpenAI payload:", transformedOpenaiPayload);
     if (tools.length > 0) {
       if (needsXMLTools) {
         console.log(`[Tool Mode] XML tool calling enabled for ${selectedModel}`);
@@ -35046,7 +35416,7 @@ ${toolInstructions}`;
     const openaiResponse = await fetch(requestUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify(openaiPayload)
+      body: JSON.stringify(transformedOpenaiPayload)
     });
     const elapsedMs = Date.now() - requestStartMs;
     console.log(`[Timing] Response received in ${elapsedMs}ms (HTTP ${openaiResponse.status})`);
@@ -35166,6 +35536,16 @@ ${toolInstructions}`;
           type: "text",
           text: openaiMessage.content || ""
         }];
+      }
+      if (transformerConfigs.length > 0) {
+        const transformedResponse = await applyReverseTransformers(
+          transformerConfigs,
+          { content: contentBlocks },
+          transformerRegistry
+        );
+        if (Array.isArray(transformedResponse.content)) {
+          contentBlocks = transformedResponse.content;
+        }
       }
       if (!contentBlocks || contentBlocks.length === 0) {
         contentBlocks = [{

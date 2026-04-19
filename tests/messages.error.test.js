@@ -19,7 +19,7 @@ describe('POST /v1/messages (errors)', () => {
         .set('content-type', 'application/json')
         .send({ messages: [{ role: 'user', content: 'Say hi' }], stream: false })
         .expect(400)
-      expect(res.body.error || res.text).toMatch(/No API key found/)
+      expect(res.body.error?.message || res.text).toMatch(/No API key found/)
     } finally {
       await stopChild(child)
       upstream.server.close()
@@ -61,4 +61,3 @@ describe('POST /v1/messages (errors)', () => {
     }
   })
 })
-

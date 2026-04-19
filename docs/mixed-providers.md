@@ -9,10 +9,10 @@ The core of the mixed provider system is the `ProviderContext`. Unlike standard 
 ```javascript
 const context = {
   providerId: 'deepseek',
-  baseUrl: 'https://api.deepseek.com/v1',
+  baseUrl: 'https://api.deepseek.com/anthropic',
   key: 'sk-deepseek-...',
   model: 'deepseek-reasoner',
-  endpointKind: 'openai'
+  endpointKind: 'anthropic'
 }
 ```
 
@@ -38,13 +38,13 @@ When enabled, a new configuration key `claudeThrone.mixedProviders` is read:
     "enabled": true,
     "reasoning": {
       "providerId": "deepseek",
-      "baseUrl": "https://api.deepseek.com/v1",
+      "baseUrl": "https://api.deepseek.com/anthropic",
       "model": "deepseek-reasoner",
-      "endpointKind": "openai"
+      "endpointKind": "anthropic"
     },
     "completion": {
       "providerId": "anthropic",
-      "baseUrl": "https://api.anthropic.com/v1",
+      "baseUrl": "https://api.anthropic.com",
       "model": "claude-3-5-sonnet-20241022",
       "endpointKind": "anthropic"
     },
@@ -63,11 +63,15 @@ When enabled, a new configuration key `claudeThrone.mixedProviders` is read:
 Per **Invariant 6**, all provider state must remain strictly isolated. 
 1. `ProviderRouter` never leaks headers between requests.
 2. If `MIXED_PROVIDERS_CONFIG` is not set, the router gracefully degrades to the globally active provider (`effectiveProvider`).
-3. Keys are dynamically fetched per request, mapped through VS Code's `SecretStorage`.
+3. The extension resolves each configured provider key from VS Code `SecretStorage` before proxy startup and injects only the enabled mixed configuration into `MIXED_PROVIDERS_CONFIG`.
+4. If mixed mode is enabled but a configured provider key is missing, startup fails before the proxy is launched.
 
 ## Endpoint Kinds
 - `openai`: Translates Anthropic messages to OpenAI chat completions format. 
 - `anthropic`: Forwards Anthropic `/v1/messages` payloads transparently.
 
-## Future Phases (Phase 3b)
-The Webview UI currently displays a single mix-provider toggle. The complete per-tier dropdown controls will be deployed in a future iteration. Until then, mixed config can be set programmatically via `mixed-presets.json` or by deploying CLI scripts that invoke `saveMixedProviders` payloads.
+## Webview Flow
+
+The webview now exposes tabbed provider controls when mixed providers and three-model mode are enabled. The primary provider tab owns the default provider state, and up to two additional provider tabs can be added for mixed routing. Each tab persists normal provider/model selections first, then `saveMixedProviders` stores the per-tier binding with `{ reasoning, completion, value }` keys.
+
+Disabling the mixed provider toggle persists `enabled: false` so the extension clears `MIXED_PROVIDERS_CONFIG` on the next proxy start. Built-in providers contribute their known base URLs automatically; custom providers use their saved base URL and endpoint-kind override.

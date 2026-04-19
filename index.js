@@ -19,6 +19,11 @@ import { parseAssistantMessage } from './xml-tool-parser.js'
 import { redactSecrets } from './utils/redaction.js'
 import { PGP_BLOCK_PATTERN, stripPgpBlocks, GROK_AGENT_COUNTS, HIGH_THINKING_PHRASES, detectHighThinking } from './utils/grok-multiagent.js'
 import { createRouterFromEnv } from './provider-router.js'
+import { TransformerRegistry, applyTransformers, applyReverseTransformers } from './transformers.js'
+import tooluseTransformer from './transformers/tooluse.js'
+import reasoningTransformer from './transformers/reasoning.js'
+import maxtokenTransformer from './transformers/maxtoken.js'
+import enhancetoolTransformer from './transformers/enhancetool.js'
 
 let packageVersion = '0.0.0'
 let packageDir = null
@@ -103,6 +108,12 @@ const KEY_ENV_HINT = 'CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KE
 // When active, routes each request to the correct upstream provider based on model name → tier mapping
 // When null, all behavior is identical to single-provider mode (backward compat)
 const router = createRouterFromEnv(process.env, endpointKindOverrides)
+
+const transformerRegistry = new TransformerRegistry()
+transformerRegistry.register('tooluse', tooluseTransformer)
+transformerRegistry.register('reasoning', reasoningTransformer)
+transformerRegistry.register('maxtoken', maxtokenTransformer)
+transformerRegistry.register('enhancetool', enhancetoolTransformer)
 
 const FALLBACK_XML_MODELS = [
   'inclusionai/ling-1t',
@@ -211,6 +222,32 @@ function getModelToolStyle(modelName, providerId) {
   }
 
   return null
+}
+
+function getModelTransformers(modelName, providerId) {
+  if (!modelName || !providerId) return []
+  const config = modelCapabilities?.transformers || null
+  if (!config) return []
+
+  const providerConfig = config[providerId] || {}
+  const fallbackProviderConfigs = providerId === 'custom'
+    ? Object.entries(config)
+        .filter(([key]) => key !== '*' && key !== providerId)
+        .flatMap(([, value]) => Object.entries(value || {}))
+    : []
+  const entries = [
+    ...Object.entries(config['*'] || {}),
+    ...fallbackProviderConfigs,
+    ...Object.entries(providerConfig),
+  ]
+
+  const matched = []
+  for (const [pattern, transformerConfigs] of entries) {
+    if (matchesPattern(modelName, pattern) && Array.isArray(transformerConfigs)) {
+      matched.push(...transformerConfigs)
+    }
+  }
+  return matched
 }
 
 /**
@@ -374,7 +411,13 @@ function buildUpstreamHeaders({ provider: providerId, endpointKind: upstreamKind
     return headers
   }
 
-  if (upstreamKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+  const normalizedKind = String(upstreamKind || '').toLowerCase()
+  const isAnthropicNative =
+    normalizedKind === ENDPOINT_KIND.ANTHROPIC_NATIVE ||
+    normalizedKind === 'anthropic' ||
+    normalizedKind === 'anthropic-native'
+
+  if (isAnthropicNative) {
     headers['x-api-key'] = apiKey
     headers['anthropic-version'] = ANTHROPIC_VERSION
     if (ANTHROPIC_BETA) {
@@ -749,7 +792,13 @@ fastify.post('/v1/messages', async (request, reply) => {
         routedContext = resolved.context
         console.log(`[Mixed Router] Model "${payload.model}" → tier "${resolved.tier}" → provider "${routedContext.providerId}" (${routedContext.endpointKind})`)
       } else {
-        console.log(`[Mixed Router] Model "${payload.model}" not in tier map, falling back to default provider`)
+        reply.code(400)
+        return {
+          error: {
+            type: 'invalid_model',
+            message: `Model "${payload.model}" is not configured in MIXED_PROVIDERS_CONFIG`
+          }
+        }
       }
     }
     
@@ -757,7 +806,6 @@ fastify.post('/v1/messages', async (request, reply) => {
     const effectiveProvider = routedContext?.providerId || provider
     const effectiveBaseUrl = routedContext?.baseUrl || normalizedBaseUrl
     const effectiveKey = routedContext?.key || key
-    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind
     
     // Comment 1: Gate requests until endpoint kind is determined for custom providers
     // Skip negotiation when using routed context (endpoint kind already resolved at startup)
@@ -769,7 +817,12 @@ fastify.post('/v1/messages', async (request, reply) => {
       }
     }
     
-    const isAnthropicNative = effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE
+    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind
+    const normalizedEffectiveEndpointKind = String(effectiveEndpointKind || '').toLowerCase()
+    const isAnthropicNative =
+      normalizedEffectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE ||
+      normalizedEffectiveEndpointKind === 'anthropic' ||
+      normalizedEffectiveEndpointKind === 'anthropic-native'
 
     if (!effectiveKey) {
       reply.code(400)
@@ -788,9 +841,11 @@ fastify.post('/v1/messages', async (request, reply) => {
     const requestUrl = isAnthropicNative
       ? `${effectiveBaseUrl}/v1/messages`
       : `${effectiveBaseUrl}/v1/chat/completions`
-    const headers = routedContext
-      ? routedContext.getHeaders()
-      : buildUpstreamHeaders({ provider, endpointKind, key })
+    const headers = buildUpstreamHeaders({
+      provider: effectiveProvider,
+      endpointKind: effectiveEndpointKind,
+      key: effectiveKey
+    })
 
     if (isAnthropicNative) {
       console.log(`[Anthropic Native] Handling request for provider: ${effectiveProvider}`)
@@ -953,7 +1008,7 @@ fastify.post('/v1/messages', async (request, reply) => {
 
     // Comment 2: Guard - never run OpenAI↔Anthropic mapping when endpoint-kind is Anthropic
     // At this point, isAnthropicNative is false, so we proceed with OpenAI-compatible flow
-    if (endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+    if (effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
       console.error('[Guard Violation] Anthropic-native endpoint reached OpenAI conversion path - this should not happen')
       reply.code(500)
       return { error: { message: 'Internal error: endpoint kind mismatch', type: 'internal_error' } }
@@ -1028,6 +1083,11 @@ fastify.post('/v1/messages', async (request, reply) => {
     const selectedModel = payload.model 
       || (payload.thinking ? models.reasoning : models.completion)
     const toolStyle = getModelToolStyle(selectedModel, effectiveProvider)
+    const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider)
+    const hasTooluseTransformer = transformerConfigs.some(config => {
+      const name = Array.isArray(config) ? config[0] : config
+      return name === 'tooluse'
+    })
     const preferJsonTools = toolStyle === 'json'
     if (toolStyle) {
       console.log(`[Tool Style] ${selectedModel} matched toolStyle=${toolStyle}`)
@@ -1069,7 +1129,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     
     // Conditionally inject XML tool instructions for models that need them
     const enableJsonTools = !shouldDropTools && preferJsonTools && tools.length > 0
-    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider)
+    const needsXMLTools = !shouldDropTools && !hasTooluseTransformer && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider)
     const messagesWithXML = needsXMLTools
       ? injectXMLToolInstructions(messages, tools)
       : messages
@@ -1142,7 +1202,11 @@ fastify.post('/v1/messages', async (request, reply) => {
       }
     }
 
-    debug('OpenAI payload:', openaiPayload)
+    const transformedOpenaiPayload = transformerConfigs.length > 0
+      ? await applyTransformers(transformerConfigs, openaiPayload, transformerRegistry)
+      : openaiPayload
+
+    debug('OpenAI payload:', transformedOpenaiPayload)
 
     // Tool mode logging and detection
     if (tools.length > 0) {
@@ -1175,7 +1239,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     const openaiResponse = await fetch(requestUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(openaiPayload)
+      body: JSON.stringify(transformedOpenaiPayload)
     });
     
     const elapsedMs = Date.now() - requestStartMs
@@ -1341,6 +1405,17 @@ fastify.post('/v1/messages', async (request, reply) => {
           type: 'text',
           text: openaiMessage.content || ''
         }]
+      }
+
+      if (transformerConfigs.length > 0) {
+        const transformedResponse = await applyReverseTransformers(
+          transformerConfigs,
+          { content: contentBlocks },
+          transformerRegistry
+        )
+        if (Array.isArray(transformedResponse.content)) {
+          contentBlocks = transformedResponse.content
+        }
       }
 
       // Ensure we have at least one content block

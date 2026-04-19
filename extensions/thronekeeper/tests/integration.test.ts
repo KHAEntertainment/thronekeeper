@@ -180,6 +180,10 @@ describe('Extension Integration Tests', () => {
     
     // Get centralized config backing from setup.ts
     const configBacking = (globalThis as any).__vscodeConfigBacking || new Map<string, any>()
+    configBacking.set('provider', 'openrouter')
+    configBacking.set('selectedCustomProviderId', '')
+    configBacking.set('applyScope', 'workspace')
+    configBacking.set('customProviders', [])
     
     // Mock context
     mockContext = {

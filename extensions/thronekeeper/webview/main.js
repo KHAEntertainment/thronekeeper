@@ -387,51 +387,79 @@
             name: 'OpenRouter',
             description: 'Access 400+ models with smart routing',
       helpUrl: 'https://openrouter.ai/keys',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://openrouter.ai/api',
+      endpointKind: 'openai'
         },
         openai: {
             name: 'OpenAI',
             description: 'GPT-4, GPT-4o, and o1 models',
       helpUrl: 'https://platform.openai.com/api-keys',
-      apiPrefix: 'openai/'
+      apiPrefix: 'openai/',
+      baseUrl: 'https://api.openai.com/v1',
+      endpointKind: 'openai'
         },
         together: {
             name: 'Together AI',
             description: 'Open source models with fast inference',
       helpUrl: 'https://api.together.xyz/settings/api-keys',
-      apiPrefix: 'together/'
+      apiPrefix: 'together/',
+      baseUrl: 'https://api.together.xyz',
+      endpointKind: 'openai'
         },
         deepseek: {
       name: 'Deepseek',
             description: 'Anthropic-compatible API with DeepSeek models',
       helpUrl: 'https://platform.deepseek.com/api_keys',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      endpointKind: 'anthropic'
         },
         glm: {
       name: 'GLM Coding Plan (z.ai)',
             description: 'Anthropic-compatible API with GLM models',
       helpUrl: 'https://open.bigmodel.cn/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.z.ai/api/anthropic',
+      endpointKind: 'anthropic'
         },
         minimax: {
             name: 'Minimax Coding Plan',
             description: 'MiniMax AI with chat and completion models',
       helpUrl: 'https://www.minimax.io/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.minimax.io/anthropic',
+      endpointKind: 'anthropic'
         },
         kimi: {
             name: 'Kimi Coding Plan (Moonshot AI)',
             description: 'Kimi AI for coding and reasoning',
       helpUrl: 'https://kimi.com/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.kimi.com/coding',
+      endpointKind: 'anthropic'
         },
         custom: {
             name: 'Custom Provider',
             description: 'Use any OpenAI-compatible endpoint',
       helpUrl: null,
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: '',
+      endpointKind: 'auto'
     }
   };
+
+  function normalizeBaseUrlForOverride(baseUrl) {
+    return String(baseUrl || '').trim().replace(/\/+$/, '');
+  }
+
+  function endpointKindForBase(baseUrl, fallback = 'auto') {
+    const normalized = normalizeBaseUrlForOverride(baseUrl);
+    if (normalized && state.endpointOverrides?.[normalized]) {
+      return state.endpointOverrides[normalized];
+    }
+    return fallback || 'auto';
+  }
 
   /**
    * Handle changes to a custom provider's endpoint kind and persist an override when a base URL is present.
@@ -474,6 +502,7 @@
   function init() {
     console.log('[init] Initializing Claude Throne webview...');
         setupEventListeners();
+    initMixedTabListeners();
     restoreState();
     
     // Notify backend that webview is ready
@@ -576,6 +605,10 @@
       // Show/hide mixed providers UI dynamically
       if (typeof updateMixedProvidersUI === 'function') {
         updateMixedProvidersUI();
+      }
+
+      if (typeof saveMixedState === 'function') {
+        saveMixedState();
       }
     });
 
@@ -2937,7 +2970,7 @@
 
     // KHA-267: Set Mixed Providers checkbox state
     const mixedProvidersCheckbox = document.getElementById('mixedProvidersCheckbox');
-    const mixedProvidersEnabled = Boolean(config.featureFlags?.enableMixedProviders ?? false);
+    const mixedProvidersEnabled = Boolean(config.mixedProviders?.enabled ?? config.featureFlags?.enableMixedProviders ?? false);
     state.featureFlags.enableMixedProviders = mixedProvidersEnabled;
     state.mixedProviders = config.mixedProviders || null;
     if (mixedProvidersCheckbox) {
@@ -3352,11 +3385,16 @@
       const threeToggle = document.getElementById('threeModelToggle');
       if (checkbox && !checkbox.checked) {
         checkbox.checked = true;
+        state.featureFlags.enableMixedProviders = true;
+        vscode.postMessage({
+          type: 'updateFeatureFlag',
+          flag: 'enableMixedProviders',
+          value: true
+        });
       }
       if (threeToggle && !threeToggle.checked) {
         threeToggle.checked = true;
-        state.twoModelMode = true;
-        updateTwoModelUI();
+        onTwoModelToggle({ target: threeToggle });
       }
 
       mixedTabState.tabCount++;
@@ -3369,6 +3407,9 @@
       }
 
       switchToTab(tabId);
+      updateMixedProvidersUI();
+      saveState();
+      saveMixedState();
     });
 
     document.querySelectorAll('.provider-tab').forEach(btn => {
@@ -3427,6 +3468,14 @@
     } else {
       loadModels();
     }
+
+    updateProviderUI();
+    updateSelectedModelsDisplay();
+    saveState();
+    vscode.postMessage({
+      type: 'updateProvider',
+      provider: state.provider
+    });
     
     updateTabLabel(tabId);
   }
@@ -3483,8 +3532,6 @@
   }
 
   function saveMixedState() {
-    if (!state.featureFlags.enableMixedProviders) return;
-
     // Use assignments if present, otherwise fallback to primary provider
     const pID = mixedTabState.providerIds['primary'] || state.provider;
     const rProvider = state.mixedTierAssignments.reasoning || pID;
@@ -3498,7 +3545,7 @@
     };
 
     const mixedConfig = {
-      enabled: mixedTabState.tabCount > 0,
+      enabled: Boolean(state.featureFlags.enableMixedProviders && mixedTabState.tabCount > 0),
       reasoning: buildTierPayload(tierMap.reasoning),
       completion: buildTierPayload(tierMap.completion),
       value: buildTierPayload(tierMap.value)
@@ -3514,27 +3561,24 @@
 
   function buildTierPayload(tierInfo) {
     const pid = tierInfo.providerId || 'openrouter';
-    let endpointKind = 'openai';
+    let baseUrl = '';
+    let endpointKind = 'auto';
+
     if (providers[pid]) {
-      if (pid === 'anthropic' || pid === 'bedrock') endpointKind = 'anthropic';
+      baseUrl = providers[pid].baseUrl || '';
+      endpointKind = providers[pid].endpointKind || 'auto';
     } else if (state.customProviders) {
       const custom = state.customProviders.find(p => p.id === pid);
-      if (custom?.endpointKind) endpointKind = custom.endpointKind;
-    }
-    
-    let baseUrl = '';
-    if (state.customProviders) {
-      const custom = state.customProviders.find(p => p.id === pid);
       if (custom?.baseUrl) baseUrl = custom.baseUrl;
+      endpointKind = custom?.endpointKind || 'auto';
     }
-
 
     return {
       providerId: pid,
       model: tierInfo.model || '',
       displayModel: tierInfo.model || '',
-      baseUrl,
-      endpointKind
+      baseUrl: normalizeBaseUrlForOverride(baseUrl),
+      endpointKind: endpointKindForBase(baseUrl, endpointKind)
     };
   }
 
@@ -3548,6 +3592,4 @@
     saveMixedState();
   }
 
-  // Initialize on DOM ready
-  initMixedTabListeners();
 })();

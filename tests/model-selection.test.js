@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import request from 'supertest'
-import { startUpstreamMock, spawnProxyProcess, stopChild } from './utils.js'
+import { findAvailablePort, startUpstreamMock, spawnProxyProcess, stopChild } from './utils.js'
 
 describe('Model selection', () => {
   it('uses model from payload when specified', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3201
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,
@@ -37,7 +37,7 @@ describe('Model selection', () => {
 
   it('falls back to REASONING_MODEL when thinking is true and no model specified', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3202
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,
@@ -69,7 +69,7 @@ describe('Model selection', () => {
 
   it('falls back to COMPLETION_MODEL when no model specified and thinking is false', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3203
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,
@@ -100,7 +100,7 @@ describe('Model selection', () => {
 
   it('uses hardcoded default when no model or env vars specified', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3204
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,
@@ -130,7 +130,7 @@ describe('Model selection', () => {
 
   it('explicit model takes precedence over thinking flag', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3205
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,

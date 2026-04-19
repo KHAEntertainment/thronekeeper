@@ -493,14 +493,23 @@ export class ProxyManager {
         
         // Resolve keys for each unique provider (smart key validation)
         const providerKeys = new Map<string, string>()
+        const missingProviders: string[] = []
         for (const pid of uniqueProviders) {
-          const key = await this.secrets.getProviderKey(pid)
+          const key = pid === 'anthropic'
+            ? await this.secrets.getAnthropicKey()
+            : await this.secrets.getProviderKey(pid)
           if (key) {
             providerKeys.set(pid, key)
             this.log.appendLine(`[ProxyManager] Mixed provider key found for: ${pid}`)
           } else {
-            this.log.appendLine(`[ProxyManager] WARNING: No key found for mixed provider: ${pid}`)
+            missingProviders.push(pid)
           }
+        }
+
+        if (missingProviders.length > 0) {
+          const errorMsg = `Mixed provider mode missing API keys for: ${missingProviders.join(', ')}`
+          this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`)
+          throw new Error(errorMsg)
         }
         
         // Build MIXED_PROVIDERS_CONFIG object
@@ -521,7 +530,10 @@ export class ProxyManager {
         this.log.appendLine(`[ProxyManager] Mixed tiers: reasoning=${mp.reasoning.providerId}/${mp.reasoning.model}, completion=${mp.completion.providerId}/${mp.completion.model}, value=${mp.value.providerId}/${mp.value.model}`)
       } catch (err) {
         this.log.appendLine(`[ProxyManager] Failed to serialize mixed provider config: ${err}`)
+        throw err
       }
+    } else {
+      delete base.MIXED_PROVIDERS_CONFIG
     }
 
     return base

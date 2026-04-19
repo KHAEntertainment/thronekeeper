@@ -87,6 +87,10 @@
         "title": "Thronekeeper: Store Moonshot API Key"
       },
       {
+        "command": "claudeThrone.storeKimiKey",
+        "title": "Thronekeeper: Store Kimi API Key"
+      },
+      {
         "command": "claudeThrone.storeMinimaxKey",
         "title": "Thronekeeper: Store MiniMax API Key"
       },

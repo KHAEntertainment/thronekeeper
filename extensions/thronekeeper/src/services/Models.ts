@@ -1,7 +1,16 @@
 import { request } from 'undici'
 import { getModelsEndpointForBase } from './endpoints'
 
-export type ProviderId = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'custom' | string
+export type ProviderId = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'kimi' | 'minimax' | 'custom' | string
+
+export class ManualEntryError extends Error {
+  readonly errorType = 'manual_entry'
+
+  constructor(provider: string) {
+    super(`${provider} does not expose a compatible model-list endpoint. Enter model IDs manually.`)
+    this.name = 'ManualEntryError'
+  }
+}
 
 /**
  * Fetches a JSON model list from the given URL with provider-aware timeouts, exponential backoff retries, and an overall time budget.
@@ -258,10 +267,10 @@ export async function listModels(provider: ProviderId, baseUrl: string, apiKey: 
 
   // KHA-267: Endpoints that do not implement standard /v1/models JSON responses should trigger the Manual Entry UI
   if (provider === 'minimax') {
-    throw new Error('Minimax models must be entered manually.')
+    throw new ManualEntryError('Minimax')
   }
   if (provider === 'kimi') {
-    throw new Error('Kimi models must be entered manually.')
+    throw new ManualEntryError('Kimi')
   }
 
   // Comment 3: Track start time for overall budget tracking

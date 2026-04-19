@@ -7,14 +7,20 @@
         "enabled": true,
         "reasoning": {
           "providerId": "deepseek",
+          "baseUrl": "https://api.deepseek.com/anthropic",
+          "endpointKind": "anthropic",
           "model": "deepseek-reasoner"
         },
         "completion": {
           "providerId": "anthropic",
+          "baseUrl": "https://api.anthropic.com",
+          "endpointKind": "anthropic",
           "model": "claude-3-5-sonnet-20241022"
         },
         "value": {
           "providerId": "deepseek",
+          "baseUrl": "https://api.deepseek.com/anthropic",
+          "endpointKind": "anthropic",
           "model": "deepseek-chat"
         }
       }
@@ -25,14 +31,20 @@
         "enabled": true,
         "reasoning": {
           "providerId": "together",
+          "baseUrl": "https://api.together.xyz",
+          "endpointKind": "openai",
           "model": "deepseek-ai/DeepSeek-R1"
         },
         "completion": {
           "providerId": "together",
+          "baseUrl": "https://api.together.xyz",
+          "endpointKind": "openai",
           "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
         },
         "value": {
           "providerId": "together",
+          "baseUrl": "https://api.together.xyz",
+          "endpointKind": "openai",
           "model": "meta-llama/Llama-3.1-8B-Instruct-Turbo"
         }
       }
