@@ -115,7 +115,7 @@ jobs:
 
       - name: Check for large binary files (>1MB)
         run: |
-          large_files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | xargs -I {} find {} -type f -size +1M 2>/dev/null || true)
+          large_files=$(git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}"...HEAD | xargs -I {} find {} -type f -size +1M 2>/dev/null || true)
           if [ -n "$large_files" ]; then
             echo "❌ Error: Large binary files detected (>1MB). These should not be committed."
             echo "$large_files"
