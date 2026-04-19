@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as vscode from 'vscode'
 
 // Import will be resolved after mock setup
@@ -52,7 +52,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
     
     // Dynamic import after mocks are set up
     if (!PanelViewProvider) {
-      const module = await import('../extensions/thronekeeper/src/views/PanelViewProvider.ts')
+      const module = await import('../extensions/thronekeeper/src/views/PanelViewProvider')
       PanelViewProvider = module.PanelViewProvider
     }
     
@@ -89,6 +89,10 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       mockProxy,
       mockLog
     )
+  })
+
+  afterEach(() => {
+    delete global.vscode
   })
   
   describe('Global Key Hydration', () => {
@@ -380,7 +384,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       const state = {
         provider: 'openrouter',
         reasoningModel: 'claude-3.5-sonnet',
-        codingModel: 'claude-3.5-haiku',
+        completionModel: 'claude-3.5-haiku',
         valueModel: 'claude-3-opus',
         modelsByProvider: {
           openrouter: {
@@ -397,14 +401,14 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       // Save models for previous provider BEFORE switching
       if (previousProvider && state.modelsByProvider[previousProvider]) {
         state.modelsByProvider[previousProvider].reasoning = state.reasoningModel
-        state.modelsByProvider[previousProvider].completion = state.codingModel
+        state.modelsByProvider[previousProvider].completion = state.completionModel
         state.modelsByProvider[previousProvider].value = state.valueModel
         
         global.vscode.postMessage({
           type: 'saveModels',
           providerId: previousProvider,
           reasoning: state.reasoningModel,
-          completion: state.codingModel,
+          completion: state.completionModel,
           value: state.valueModel
         })
       }
@@ -554,7 +558,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
         featureFlags: { enablePreApplyHydration: false },
         autoHydratedProviders: new Set(),
         reasoningModel: 'test-model',
-        codingModel: 'test-coding',
+        completionModel: 'test-completion',
         valueModel: 'test-value'
       };
       
@@ -564,7 +568,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       
       const shouldHydrate = state.featureFlags.enablePreApplyHydration &&
         !config.modelSelectionsByProvider?.openrouter?.reasoning && 
-        (state.reasoningModel || state.codingModel || state.valueModel) &&
+        (state.reasoningModel || state.completionModel || state.valueModel) &&
         !state.autoHydratedProviders.has('openrouter');
       
       expect(shouldHydrate).toBe(false);
@@ -573,7 +577,7 @@ describe('Phase 4: Pre-Apply Hydration Tests', () => {
       
       const shouldHydrateNow = state.featureFlags.enablePreApplyHydration &&
         !config.modelSelectionsByProvider?.openrouter?.reasoning && 
-        (state.reasoningModel || state.codingModel || state.valueModel) &&
+        (state.reasoningModel || state.completionModel || state.valueModel) &&
         !state.autoHydratedProviders.has('openrouter');
       
       expect(shouldHydrateNow).toBe(true);

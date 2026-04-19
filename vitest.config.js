@@ -1,10 +1,13 @@
 import { defineConfig } from 'vitest/config'
-import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 export default defineConfig({
   resolve: {
+    conditions: ['node'],
     alias: {
-      undici: fileURLToPath(new URL('./node_modules/undici/index.js', import.meta.url))
+      undici: require.resolve('undici')
     }
   },
   test: {

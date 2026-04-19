@@ -124,6 +124,7 @@ const FALLBACK_XML_MODELS = [
 ]
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS = ['openai', 'anthropic', 'openrouter', 'glm', 'deepseek']
 
 function matchesPattern(modelName, pattern) {
   if (typeof pattern !== 'string' || !pattern) return false
@@ -230,9 +231,11 @@ function getModelTransformers(modelName, providerId) {
   if (!config) return []
 
   const providerConfig = config[providerId] || {}
+  // Custom endpoints may use familiar model IDs, but only trusted built-in provider
+  // patterns should be considered as fallback transformer sources.
   const fallbackProviderConfigs = providerId === 'custom'
     ? Object.entries(config)
-        .filter(([key]) => key !== '*' && key !== providerId)
+        .filter(([key]) => CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS.includes(key))
         .flatMap(([, value]) => Object.entries(value || {}))
     : []
   const entries = [
@@ -1524,6 +1527,17 @@ fastify.post('/v1/messages', async (request, reply) => {
     const decoder = new TextDecoder('utf-8')
     const reader = openaiResponse.body.getReader()
     let done = false
+    const sendContentSSE = async (event, payload) => {
+      let eventPayload = payload
+      if (transformerConfigs.length > 0) {
+        eventPayload = await applyReverseTransformers(
+          transformerConfigs,
+          eventPayload,
+          transformerRegistry
+        )
+      }
+      sendSSE(reply, event, eventPayload)
+    }
 
     try {
       while (!done) {
@@ -1561,7 +1575,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                   if (finalParsed.choices?.[0]?.delta?.content) {
                     accumulatedContent += finalParsed.choices[0].delta.content
                     if (textBlockStarted) {
-                      sendSSE(reply, 'content_block_delta', {
+                      await sendContentSSE('content_block_delta', {
                         type: 'content_block_delta',
                         index: 0,
                         delta: {
@@ -1588,7 +1602,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                   : 'Model response was empty.'
                 if (!textBlockStarted) {
                   textBlockStarted = true
-                  sendSSE(reply, 'content_block_start', {
+                  await sendContentSSE('content_block_start', {
                     type: 'content_block_start',
                     index: 0,
                     content_block: {
@@ -1597,7 +1611,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                     }
                   })
                 }
-                sendSSE(reply, 'content_block_delta', {
+                await sendContentSSE('content_block_delta', {
                   type: 'content_block_delta',
                   index: 0,
                   delta: {
@@ -1682,7 +1696,7 @@ fastify.post('/v1/messages', async (request, reply) => {
               const idx = toolCall.index
               if (toolCallAccumulators[idx] === undefined) {
                 toolCallAccumulators[idx] = ""
-                sendSSE(reply, 'content_block_start', {
+                await sendContentSSE('content_block_start', {
                   type: 'content_block_start',
                   index: idx,
                   content_block: {
@@ -1697,7 +1711,7 @@ fastify.post('/v1/messages', async (request, reply) => {
               const oldArgs = toolCallAccumulators[idx]
               if (newArgs.length > oldArgs.length) {
                 const deltaText = newArgs.substring(oldArgs.length)
-                sendSSE(reply, 'content_block_delta', {
+                await sendContentSSE('content_block_delta', {
                   type: 'content_block_delta',
                   index: idx,
                   delta: {
@@ -1715,7 +1729,7 @@ fastify.post('/v1/messages', async (request, reply) => {
             
             if (!textBlockStarted) {
               textBlockStarted = true
-              sendSSE(reply, 'content_block_start', {
+              await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
                 index: 0,
                 content_block: {
@@ -1724,7 +1738,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                 }
               })
             }
-            sendSSE(reply, 'content_block_delta', {
+            await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
               index: 0,
               delta: {
@@ -1732,10 +1746,10 @@ fastify.post('/v1/messages', async (request, reply) => {
                 text: delta.content
               }
             })
-          } else if (delta && delta.reasoning) {
+          } else if (delta && (delta.reasoning || delta.reasoning_content)) {
             if (!textBlockStarted) {
               textBlockStarted = true
-              sendSSE(reply, 'content_block_start', {
+              await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
                 index: 0,
                 content_block: {
@@ -1744,13 +1758,13 @@ fastify.post('/v1/messages', async (request, reply) => {
                 }
               })
             }
-            accumulatedReasoning += delta.reasoning
-            sendSSE(reply, 'content_block_delta', {
+            const reasoningText = delta.reasoning || delta.reasoning_content
+            accumulatedReasoning += reasoningText
+            await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
               index: 0,
               delta: {
-                type: 'thinking_delta',
-                thinking: delta.reasoning
+                reasoning: reasoningText
               }
             })
           }

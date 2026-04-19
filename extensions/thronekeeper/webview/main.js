@@ -396,7 +396,7 @@
             description: 'GPT-4, GPT-4o, and o1 models',
       helpUrl: 'https://platform.openai.com/api-keys',
       apiPrefix: 'openai/',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: 'https://api.openai.com',
       endpointKind: 'openai'
         },
         together: {
@@ -3426,6 +3426,13 @@
         const closeId = btn.getAttribute('data-close');
         if (closeId) removeTab(closeId);
       });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        const closeId = btn.getAttribute('data-close');
+        if (closeId) removeTab(closeId);
+      });
     });
   }
 
@@ -3500,18 +3507,35 @@
   }
 
   function removeTab(tabId) {
+    const removedProviderId = mixedTabState.providerIds[tabId];
+    const primaryProviderId = mixedTabState.providerIds.primary || state.provider;
     const tabBtn = document.getElementById(`providerTab-${tabId}`);
     if (tabBtn) tabBtn.style.display = 'none';
 
     mixedTabState.providerIds[tabId] = '';
+    if (removedProviderId) {
+      ['reasoning', 'completion', 'value'].forEach(tier => {
+        if (state.mixedTierAssignments?.[tier] === removedProviderId) {
+          state.mixedTierAssignments[tier] = primaryProviderId;
+        }
+      });
+    }
 
     if (mixedTabState.activeTab === tabId) {
       switchToTab('primary');
     }
 
     if (tabId === '1' && mixedTabState.tabCount === 2) {
+      const shiftedProviderId = mixedTabState.providerIds['2'];
       mixedTabState.providerIds['1'] = mixedTabState.providerIds['2'];
       mixedTabState.providerIds['2'] = '';
+      if (shiftedProviderId) {
+        ['reasoning', 'completion', 'value'].forEach(tier => {
+          if (state.mixedTierAssignments?.[tier] === shiftedProviderId) {
+            state.mixedTierAssignments[tier] = shiftedProviderId;
+          }
+        });
+      }
       
       const tab2Btn = document.getElementById('providerTab-2');
       if (tab2Btn) tab2Btn.style.display = 'none';

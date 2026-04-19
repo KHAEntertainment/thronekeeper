@@ -39,6 +39,8 @@ function normalizeMixedProviderConfig(input) {
   const errors = []
   const normalized = { enabled: source.enabled !== false }
 
+  // Mirrors the extension's MixedProviderConfigSchema at the proxy boundary
+  // without bundling the schema library into the standalone proxy artifact.
   for (const tier of MIXED_TIERS) {
     const binding = source[tier]
     if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
@@ -49,16 +51,21 @@ function normalizeMixedProviderConfig(input) {
     const providerId = typeof binding.providerId === 'string' ? binding.providerId.trim() : ''
     const baseUrl = typeof binding.baseUrl === 'string' ? binding.baseUrl.trim() : ''
     const model = typeof binding.model === 'string' ? binding.model.trim() : ''
+    const displayModel = typeof binding.displayModel === 'string' ? binding.displayModel.trim() : binding.displayModel
 
     if (!providerId) errors.push(`${tier}.providerId must be a non-empty string`)
     if (!baseUrl) errors.push(`${tier}.baseUrl must be a non-empty string`)
     if (!model) errors.push(`${tier}.model must be a non-empty string`)
+    if (binding.displayModel !== undefined && typeof displayModel === 'string' && !displayModel) {
+      errors.push(`${tier}.displayModel must be a non-empty string when provided`)
+    }
 
     normalized[tier] = {
       ...binding,
       providerId,
       baseUrl,
       model,
+      ...(displayModel !== undefined && { displayModel }),
       endpointKind: normalizeEndpointKind(binding.endpointKind),
     }
   }
@@ -108,6 +115,9 @@ export class ProviderContext {
       }
     } else {
       this.endpointKind = inferEndpointKindSync(providerId, baseUrl, endpointOverrides)
+    }
+    if (!this.endpointKind) {
+      throw new Error(`[ProviderContext] Unable to infer endpoint kind for provider "${providerId}"`)
     }
   }
 
@@ -234,11 +244,12 @@ export class ProviderRouter {
             existingContext.endpointKind === ctx.endpointKind &&
             existingContext.model === ctx.model
 
-          if (!sameContext || existing.tier !== tier) {
+          if (!sameContext) {
             throw new Error(
               `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
             )
           }
+          continue
         }
 
         const entry = { tier, context: ctx }

@@ -12,7 +12,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
   private modelsCache: Map<string, { models: any[], timestamp: number }> = new Map()
   // Comment 4: Sequence token tracking for race protection
   private sequenceTokenCounter: number = 0
-  private currentSequenceToken: number | null = null
+  private currentSequenceTokenByProvider: Map<string, number> = new Map()
   // Comment 6: Trace ID for provider flows (DEBUG mode only)
   private currentTraceId: string | null = null
 
@@ -566,7 +566,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     // Comment 2: Generate sequence token for postModels to ensure validation uniform
     this.sequenceTokenCounter++
     const sequenceToken = `seq-${this.sequenceTokenCounter}`
-    this.currentSequenceToken = this.sequenceTokenCounter
+    this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter)
     
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       this.post({ 
@@ -590,11 +590,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       const requestSequenceNum = requestToken.startsWith('seq-') 
         ? parseInt(requestToken.replace('seq-', ''), 10) 
         : null
-      this.currentSequenceToken = requestSequenceNum !== null ? requestSequenceNum : this.sequenceTokenCounter
+      this.currentSequenceTokenByProvider.set(provider, requestSequenceNum !== null ? requestSequenceNum : this.sequenceTokenCounter)
     } else {
       this.sequenceTokenCounter++
       sequenceToken = `seq-${this.sequenceTokenCounter}`
-      this.currentSequenceToken = this.sequenceTokenCounter
+      this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter)
     }
     
     // Comment 6: Include trace ID in logs (DEBUG mode only)
@@ -690,8 +690,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         ? parseInt(sequenceToken.replace('seq-', ''), 10) 
         : null
       
-      if (responseSequenceNum !== null && this.currentSequenceToken !== null && responseSequenceNum < this.currentSequenceToken) {
-        this.log.appendLine(`[handleListModels] DISCARDING late response - sequence token ${sequenceToken} is older than current ${this.currentSequenceToken}`)
+      const currentProviderSequenceToken = this.currentSequenceTokenByProvider.get(provider) ?? null
+      if (responseSequenceNum !== null && currentProviderSequenceToken !== null && responseSequenceNum < currentProviderSequenceToken) {
+        this.log.appendLine(`[handleListModels] DISCARDING late response for ${provider} - sequence token ${sequenceToken} is older than current ${currentProviderSequenceToken}`)
         return // Discard late response
       }
       
@@ -862,7 +863,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     
     // Comment 5: Reset sequence token counter on provider switch to ensure clean state
     this.sequenceTokenCounter = 0
-    this.currentSequenceToken = null
+    this.currentSequenceTokenByProvider.delete(provider)
     
     // Comment 6: Generate trace ID for provider flow (DEBUG mode only)
     const cfg = vscode.workspace.getConfiguration('claudeThrone')
@@ -880,7 +881,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     // Comment 2: Generate sequence token for immediate empty list after provider switch
     this.sequenceTokenCounter++
     const sequenceToken = `seq-${this.sequenceTokenCounter}`
-    this.currentSequenceToken = this.sequenceTokenCounter
+    this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter)
     
     // Clear the webview with an empty list immediately after switching to prevent stale renders
     this.post({ 
@@ -2061,20 +2062,21 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
     const fallbackTier = {
       providerId: this.runtimeProvider || 'openrouter',
-      baseUrl: '',
-      model: '',
-      displayModel: '',
       endpointKind: 'auto'
     }
 
     const buildTier = (tier: string) => {
       const binding = hasTier(tier) ? msg[tier] : fallbackTier
+      const readString = (value: unknown) =>
+        typeof value === 'string' && value.trim() ? value.trim() : undefined
+      const providerId = readString(binding.providerId) || fallbackTier.providerId
+      const model = readString(binding.model)
       return {
-        providerId: binding.providerId || fallbackTier.providerId,
-        baseUrl: binding.baseUrl || '',
-        model: binding.model || '',
-        displayModel: binding.displayModel || binding.model || '',
-        endpointKind: binding.endpointKind || 'auto',
+        providerId,
+        baseUrl: readString(binding.baseUrl),
+        model,
+        displayModel: readString(binding.displayModel) || model,
+        endpointKind: readString(binding.endpointKind) || 'auto',
       }
     }
 
@@ -2140,11 +2142,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             </button>
             <button class="provider-tab" id="providerTab-1" data-tab="1" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
               Provider 2
-              <span class="tab-close" data-close="1" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+              <span class="tab-close" data-close="1" role="button" tabindex="0" aria-label="Remove Provider 2 tab" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
             </button>
             <button class="provider-tab" id="providerTab-2" data-tab="2" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
               Provider 3
-              <span class="tab-close" data-close="2" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+              <span class="tab-close" data-close="2" role="button" tabindex="0" aria-label="Remove Provider 3 tab" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
             </button>
             <button id="addProviderTabBtn" style="display: none; padding: 6px 10px; font-size: 13px; font-weight: 600; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-textLink-foreground); font-family: inherit; margin: 0; position: relative;" title="Add another provider">
               +

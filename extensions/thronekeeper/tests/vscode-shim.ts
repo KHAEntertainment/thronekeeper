@@ -68,19 +68,48 @@ export const StatusBarAlignment = {
   Right: 2
 }
 
-export class TreeItem {}
+export class TreeItem {
+  label?: unknown
+  collapsibleState?: unknown
+
+  constructor(label?: unknown, collapsibleState?: unknown) {
+    this.label = label
+    this.collapsibleState = collapsibleState
+  }
+}
 
 export class EventEmitter<T = unknown> {
-  event = () => undefined
-  fire(_value?: T) {}
-  dispose() {}
+  private listeners: Array<(value: T) => unknown> = []
+
+  event = (listener?: (value: T) => unknown, thisArgs?: unknown) => {
+    if (typeof listener !== 'function') {
+      return { dispose: () => undefined }
+    }
+    const wrapped = thisArgs ? listener.bind(thisArgs) : listener
+    this.listeners.push(wrapped)
+    return {
+      dispose: () => {
+        this.listeners = this.listeners.filter(existing => existing !== wrapped)
+      }
+    }
+  }
+
+  fire(value?: T) {
+    for (const listener of [...this.listeners]) {
+      listener(value as T)
+    }
+  }
+
+  dispose() {
+    this.listeners = []
+  }
 }
 
 export class SecretStorage {
   get = async () => undefined
   set = async () => undefined
   delete = async () => undefined
-  onDidChange = () => ({ dispose: () => undefined })
+  onDidChange = (_listener?: (e: { key: string }) => unknown) => ({ dispose: () => undefined })
 }
 
 export const extensions = {

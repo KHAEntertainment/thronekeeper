@@ -50,10 +50,10 @@ exports.CustomEndpointKindSchema = zod_1.z.enum(['auto', 'openai', 'anthropic'])
  * route to a different upstream API provider.
  */
 exports.TierProviderBindingSchema = zod_1.z.object({
-    providerId: zod_1.z.string(), // e.g., 'glm', 'minimax', 'kimi', 'custom'
-    baseUrl: zod_1.z.string(), // Upstream base URL for this provider
-    model: zod_1.z.string(), // Model ID at the upstream provider (without namespace)
-    displayModel: zod_1.z.string().optional(), // Namespaced display name (e.g., 'glm/glm-5.1')
+    providerId: zod_1.z.string().trim().min(1), // e.g., 'glm', 'minimax', 'kimi', 'custom'
+    baseUrl: zod_1.z.string().trim().min(1), // Upstream base URL for this provider
+    model: zod_1.z.string().trim().min(1), // Model ID at the upstream provider (without namespace)
+    displayModel: zod_1.z.string().trim().min(1).optional(), // Namespaced display name (e.g., 'glm/glm-5.1')
     endpointKind: zod_1.z.enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native']).optional(),
 });
 /**

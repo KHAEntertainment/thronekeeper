@@ -197,46 +197,49 @@ describe('Phase 5: UI Optimization Tests', () => {
       
       // Second render
       renderModelList(container);
-      expect(setupCalls.length).toBe(1); // Still 1, not 2
-      
+	      expect(setupCalls.length).toBe(1); // Still 1, not 2
+
       // Third render
       renderModelList(container);
       expect(setupCalls.length).toBe(1); // Still 1
     });
-  });
-  
+	  });
+
   describe('Filter Input Performance', () => {
     it('debouncing reduces render calls during rapid typing', async () => {
       vi.useFakeTimers();
-      const renderCalls = [];
-      
-      function render(searchTerm) {
-        renderCalls.push(searchTerm);
+      try {
+	        const renderCalls = [];
+
+        function render(searchTerm) {
+          renderCalls.push(searchTerm);
+	        }
+
+        function debounce(func, wait) {
+          let timeout;
+          return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func(...args), wait);
+          };
+	        }
+
+	        const debouncedRender = debounce(render, 100);
+
+        // Simulate rapid typing: "test"
+        debouncedRender('t');
+        setTimeout(() => debouncedRender('te'), 20);
+        setTimeout(() => debouncedRender('tes'), 40);
+	        setTimeout(() => debouncedRender('test'), 60);
+
+        // Without debouncing: 4 renders
+	        // With debouncing: 1 render (only the last)
+
+        await vi.advanceTimersByTimeAsync(200);
+        expect(renderCalls.length).toBe(1);
+        expect(renderCalls[0]).toBe('test');
+      } finally {
+        vi.useRealTimers();
       }
-      
-      function debounce(func, wait) {
-        let timeout;
-        return function(...args) {
-          clearTimeout(timeout);
-          timeout = setTimeout(() => func(...args), wait);
-        };
-      }
-      
-      const debouncedRender = debounce(render, 100);
-      
-      // Simulate rapid typing: "test"
-      debouncedRender('t');
-      setTimeout(() => debouncedRender('te'), 20);
-      setTimeout(() => debouncedRender('tes'), 40);
-      setTimeout(() => debouncedRender('test'), 60);
-      
-      // Without debouncing: 4 renders
-      // With debouncing: 1 render (only the last)
-      
-      await vi.advanceTimersByTimeAsync(200);
-      expect(renderCalls.length).toBe(1);
-      expect(renderCalls[0]).toBe('test');
-      vi.useRealTimers();
     });
     
     it('filters are applied correctly with debouncing', async () => {

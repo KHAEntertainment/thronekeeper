@@ -33923,14 +33923,19 @@ function normalizeMixedProviderConfig(input) {
     const providerId = typeof binding.providerId === "string" ? binding.providerId.trim() : "";
     const baseUrl2 = typeof binding.baseUrl === "string" ? binding.baseUrl.trim() : "";
     const model2 = typeof binding.model === "string" ? binding.model.trim() : "";
+    const displayModel = typeof binding.displayModel === "string" ? binding.displayModel.trim() : binding.displayModel;
     if (!providerId) errors.push(`${tier}.providerId must be a non-empty string`);
     if (!baseUrl2) errors.push(`${tier}.baseUrl must be a non-empty string`);
     if (!model2) errors.push(`${tier}.model must be a non-empty string`);
+    if (binding.displayModel !== void 0 && typeof displayModel === "string" && !displayModel) {
+      errors.push(`${tier}.displayModel must be a non-empty string when provided`);
+    }
     normalized[tier] = {
       ...binding,
       providerId,
       baseUrl: baseUrl2,
       model: model2,
+      ...displayModel !== void 0 && { displayModel },
       endpointKind: normalizeEndpointKind(binding.endpointKind)
     };
   }
@@ -33970,6 +33975,9 @@ var ProviderContext = class {
       }
     } else {
       this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
+    }
+    if (!this.endpointKind) {
+      throw new Error(`[ProviderContext] Unable to infer endpoint kind for provider "${providerId}"`);
     }
   }
   /**
@@ -34071,11 +34079,12 @@ var ProviderRouter = class {
         if (existing) {
           const existingContext = existing.context;
           const sameContext = existingContext.providerId === ctx.providerId && existingContext.baseUrl === ctx.baseUrl && existingContext.endpointKind === ctx.endpointKind && existingContext.model === ctx.model;
-          if (!sameContext || existing.tier !== tier) {
+          if (!sameContext) {
             throw new Error(
               `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
             );
           }
+          continue;
         }
         const entry = { tier, context: ctx };
         this.tierMap.set(ctx.model, entry);
@@ -34530,6 +34539,7 @@ var FALLBACK_XML_MODELS = [
   "deepseek-v3"
 ];
 var escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS = ["openai", "anthropic", "openrouter", "glm", "deepseek"];
 function matchesPattern(modelName, pattern) {
   if (typeof pattern !== "string" || !pattern) return false;
   const value = modelName.toLowerCase();
@@ -34606,7 +34616,7 @@ function getModelTransformers(modelName, providerId) {
   const config = modelCapabilities?.transformers || null;
   if (!config) return [];
   const providerConfig = config[providerId] || {};
-  const fallbackProviderConfigs = providerId === "custom" ? Object.entries(config).filter(([key2]) => key2 !== "*" && key2 !== providerId).flatMap(([, value]) => Object.entries(value || {})) : [];
+  const fallbackProviderConfigs = providerId === "custom" ? Object.entries(config).filter(([key2]) => CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS.includes(key2)).flatMap(([, value]) => Object.entries(value || {})) : [];
   const entries = [
     ...Object.entries(config["*"] || {}),
     ...fallbackProviderConfigs,
@@ -35600,6 +35610,17 @@ ${toolInstructions}`;
     const decoder = new import_util.TextDecoder("utf-8");
     const reader = openaiResponse.body.getReader();
     let done = false;
+    const sendContentSSE = async (event, payload2) => {
+      let eventPayload = payload2;
+      if (transformerConfigs.length > 0) {
+        eventPayload = await applyReverseTransformers(
+          transformerConfigs,
+          eventPayload,
+          transformerRegistry
+        );
+      }
+      sendSSE(reply, event, eventPayload);
+    };
     try {
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -35626,7 +35647,7 @@ ${toolInstructions}`;
                   if (finalParsed.choices?.[0]?.delta?.content) {
                     accumulatedContent += finalParsed.choices[0].delta.content;
                     if (textBlockStarted) {
-                      sendSSE(reply, "content_block_delta", {
+                      await sendContentSSE("content_block_delta", {
                         type: "content_block_delta",
                         index: 0,
                         delta: {
@@ -35650,7 +35671,7 @@ ${toolInstructions}`;
                 const fallbackText = trimmedReasoning ? "Model returned only reasoning without a final answer. Consider selecting a different OpenRouter model or disabling tool usage." : "Model response was empty.";
                 if (!textBlockStarted) {
                   textBlockStarted = true;
-                  sendSSE(reply, "content_block_start", {
+                  await sendContentSSE("content_block_start", {
                     type: "content_block_start",
                     index: 0,
                     content_block: {
@@ -35659,7 +35680,7 @@ ${toolInstructions}`;
                     }
                   });
                 }
-                sendSSE(reply, "content_block_delta", {
+                await sendContentSSE("content_block_delta", {
                   type: "content_block_delta",
                   index: 0,
                   delta: {
@@ -35734,7 +35755,7 @@ ${toolInstructions}`;
                 const idx = toolCall.index;
                 if (toolCallAccumulators[idx] === void 0) {
                   toolCallAccumulators[idx] = "";
-                  sendSSE(reply, "content_block_start", {
+                  await sendContentSSE("content_block_start", {
                     type: "content_block_start",
                     index: idx,
                     content_block: {
@@ -35749,7 +35770,7 @@ ${toolInstructions}`;
                 const oldArgs = toolCallAccumulators[idx];
                 if (newArgs.length > oldArgs.length) {
                   const deltaText = newArgs.substring(oldArgs.length);
-                  sendSSE(reply, "content_block_delta", {
+                  await sendContentSSE("content_block_delta", {
                     type: "content_block_delta",
                     index: idx,
                     delta: {
@@ -35765,7 +35786,7 @@ ${toolInstructions}`;
               fullContent += delta.content;
               if (!textBlockStarted) {
                 textBlockStarted = true;
-                sendSSE(reply, "content_block_start", {
+                await sendContentSSE("content_block_start", {
                   type: "content_block_start",
                   index: 0,
                   content_block: {
@@ -35774,7 +35795,7 @@ ${toolInstructions}`;
                   }
                 });
               }
-              sendSSE(reply, "content_block_delta", {
+              await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
                 index: 0,
                 delta: {
@@ -35782,10 +35803,10 @@ ${toolInstructions}`;
                   text: delta.content
                 }
               });
-            } else if (delta && delta.reasoning) {
+            } else if (delta && (delta.reasoning || delta.reasoning_content)) {
               if (!textBlockStarted) {
                 textBlockStarted = true;
-                sendSSE(reply, "content_block_start", {
+                await sendContentSSE("content_block_start", {
                   type: "content_block_start",
                   index: 0,
                   content_block: {
@@ -35794,13 +35815,13 @@ ${toolInstructions}`;
                   }
                 });
               }
-              accumulatedReasoning += delta.reasoning;
-              sendSSE(reply, "content_block_delta", {
+              const reasoningText = delta.reasoning || delta.reasoning_content;
+              accumulatedReasoning += reasoningText;
+              await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
                 index: 0,
                 delta: {
-                  type: "thinking_delta",
-                  thinking: delta.reasoning
+                  reasoning: reasoningText
                 }
               });
             }

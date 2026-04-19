@@ -86,15 +86,16 @@ export function startUpstreamMock({ mode = 'json', jsonResponse, sseChunks, asse
           res.writeHead(statusCode, { 'content-type': 'application/json' })
           res.end(data)
         } else if (mode === 'sse') {
+          if (statusCode < 200 || statusCode >= 300) {
+            res.writeHead(statusCode, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ error: { message: `status ${statusCode}` } }))
+            return
+          }
           res.writeHead(statusCode, {
             'content-type': 'text/event-stream',
             'cache-control': 'no-cache',
             connection: 'keep-alive',
           })
-          if (statusCode < 200 || statusCode >= 300) {
-            res.end(JSON.stringify({ error: { message: `status ${statusCode}` } }))
-            return
-          }
           const chunks = sseChunks || []
           for (const obj of chunks) {
             if (typeof obj === 'string') {

@@ -53,10 +53,10 @@ export type CustomEndpointKind = z.infer<typeof CustomEndpointKindSchema>
  * route to a different upstream API provider.
  */
 export const TierProviderBindingSchema = z.object({
-  providerId: z.string(),      // e.g., 'glm', 'minimax', 'kimi', 'custom'
-  baseUrl: z.string(),         // Upstream base URL for this provider
-  model: z.string(),           // Model ID at the upstream provider (without namespace)
-  displayModel: z.string().optional(),  // Namespaced display name (e.g., 'glm/glm-5.1')
+  providerId: z.string().trim().min(1),      // e.g., 'glm', 'minimax', 'kimi', 'custom'
+  baseUrl: z.string().trim().min(1),         // Upstream base URL for this provider
+  model: z.string().trim().min(1),           // Model ID at the upstream provider (without namespace)
+  displayModel: z.string().trim().min(1).optional(),  // Namespaced display name (e.g., 'glm/glm-5.1')
   endpointKind: z.enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native']).optional(),
 })
 

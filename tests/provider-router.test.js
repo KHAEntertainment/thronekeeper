@@ -302,6 +302,19 @@ describe('ProviderRouter', () => {
     expect(() => new ProviderRouter(config)).toThrow(/assigned to multiple/)
   })
 
+  it('allows duplicate model IDs when tiers share the same upstream context', () => {
+    const config = {
+      reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key', model: 'shared-model' },
+      completion: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key', model: 'shared-model' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'kimi-key', model: 'kimi-k2.5' },
+    }
+
+    const router = new ProviderRouter(config)
+
+    expect(router.resolve('shared-model').context.providerId).toBe('glm')
+    expect(router.getContextForTier('completion').model).toBe('shared-model')
+  })
+
   it('produces safe debug output', () => {
     const router = new ProviderRouter(baseMixedConfig)
     const debug = router.toDebugObject()
