@@ -12,6 +12,21 @@ export class ManualEntryError extends Error {
   }
 }
 
+export const STATIC_PROVIDER_MODELS: Record<string, string[]> = {
+  minimax: [
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2',
+  ],
+  kimi: [
+    'kimi-for-coding',
+  ],
+}
+
 /**
  * Fetches a JSON model list from the given URL with provider-aware timeouts, exponential backoff retries, and an overall time budget.
  *
@@ -265,12 +280,9 @@ export async function listModels(provider: ProviderId, baseUrl: string, apiKey: 
     throw new Error('Custom provider requires a base URL')
   }
 
-  // KHA-267: Endpoints that do not implement standard /v1/models JSON responses should trigger the Manual Entry UI
-  if (provider === 'minimax') {
-    throw new ManualEntryError('Minimax')
-  }
-  if (provider === 'kimi') {
-    throw new ManualEntryError('Kimi')
+  const staticModels = STATIC_PROVIDER_MODELS[provider]
+  if (staticModels) {
+    return [...staticModels]
   }
 
   // Comment 3: Track start time for overall budget tracking

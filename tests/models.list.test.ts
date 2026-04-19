@@ -25,6 +25,30 @@ describe('Models.list: normalization and error handling', () => {
     vi.resetModules()
   })
 
+  it('returns static MiniMax model presets without fetching', async () => {
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
+    const ids = await listModels('minimax', 'https://api.minimax.io/anthropic', 'KEY')
+
+    expect(ids).toEqual([
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.1',
+      'MiniMax-M2.1-highspeed',
+      'MiniMax-M2',
+    ])
+    expect(mockRequest).not.toHaveBeenCalled()
+  })
+
+  it('returns the static Kimi Code model preset without fetching', async () => {
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
+    const ids = await listModels('kimi', 'https://api.kimi.com/coding', 'KEY')
+
+    expect(ids).toEqual(['kimi-for-coding'])
+    expect(mockRequest).not.toHaveBeenCalled()
+  })
+
   it('normalizes OpenAI-style data[] for Deepseek', async () => {
     mockRequest.mockImplementation(async (url: string, opts: any) => {
       expect(url).toBe('https://api.deepseek.com/v1/models')

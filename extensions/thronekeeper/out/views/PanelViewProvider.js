@@ -2016,14 +2016,6 @@ class PanelViewProvider {
               </div>
             </div>
 
-            <div class="two-model-toggle" style="margin-left: 20px; margin-top: 8px;" id="mixedProvidersSection">
-              <input type="checkbox" id="mixedProvidersCheckbox">
-              <label for="mixedProvidersCheckbox">Mix Providers</label>
-              <div style="margin-left: 20px; margin-top: 4px; font-size: 11px; color: var(--vscode-descriptionForeground);">
-                Route each model tier to a different API provider
-              </div>
-            </div>
-
             <div id="selectedModelsDisplay" class="selected-models-display" style="margin-top: 12px; font-size: 11px; color: var(--vscode-descriptionForeground);">
               <div id="reasoningModelDisplay" style="margin-bottom: 4px;"></div>
               <div id="codingModelDisplay" style="margin-bottom: 4px;"></div>

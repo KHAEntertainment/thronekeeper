@@ -28,6 +28,8 @@
       together: { reasoning: '', completion: '', value: '' },
       deepseek: { reasoning: '', completion: '', value: '' },
       glm: { reasoning: '', completion: '', value: '' },
+      kimi: { reasoning: '', completion: '', value: '' },
+      minimax: { reasoning: '', completion: '', value: '' },
       custom: { reasoning: '', completion: '', value: '' }
     },
     proxyRunning: false,
@@ -588,28 +590,6 @@
         flag: 'enableAgentTeams',
         value: enabled
       });
-    });
-
-    // KHA-267: Mixed Providers Checkbox
-    const mixedProvidersCheckbox = document.getElementById('mixedProvidersCheckbox');
-    mixedProvidersCheckbox?.addEventListener('change', (e) => {
-      const enabled = !!e.target.checked;
-      state.featureFlags.enableMixedProviders = enabled;
-
-      vscode.postMessage({
-        type: 'updateFeatureFlag',
-        flag: 'enableMixedProviders',
-        value: enabled
-      });
-
-      // Show/hide mixed providers UI dynamically
-      if (typeof updateMixedProvidersUI === 'function') {
-        updateMixedProvidersUI();
-      }
-
-      if (typeof saveMixedState === 'function') {
-        saveMixedState();
-      }
     });
 
     // Model Search
@@ -1887,6 +1867,9 @@
     const newValue = e.target.checked;
     console.log('[onTwoModelToggle] Toggling three-model mode from', state.twoModelMode, 'to', newValue);
     state.twoModelMode = newValue;
+    if (!newValue && typeof deactivateMixedProviderTabs === 'function') {
+      deactivateMixedProviderTabs();
+    }
     updateTwoModelUI();
     saveState();
     
@@ -1917,12 +1900,6 @@
     
     // Update OpusPlan UI when three-model mode changes
     updateOpusPlanUI();
-    
-    // KHA-267: Show/hide mixed providers section based on three-model mode
-    const mixedProvidersSection = document.getElementById('mixedProvidersSection');
-    if (mixedProvidersSection) {
-      mixedProvidersSection.style.display = state.twoModelMode ? 'block' : 'none';
-    }
     
     // Phase 3b: Ensure UI blocks toggle appropriately
     if (typeof updateMixedProvidersUI === 'function') {
@@ -2968,14 +2945,10 @@
       agentTeamsCheckbox.checked = agentTeamsEnabled;
     }
 
-    // KHA-267: Set Mixed Providers checkbox state
-    const mixedProvidersCheckbox = document.getElementById('mixedProvidersCheckbox');
-    const mixedProvidersEnabled = Boolean(config.mixedProviders?.enabled ?? config.featureFlags?.enableMixedProviders ?? false);
+    // KHA-267: Restore mixed-provider tab activation separately from runnable route config.
+    const mixedProvidersEnabled = Boolean(config.featureFlags?.enableMixedProviders ?? config.mixedProviders?.enabled ?? false);
     state.featureFlags.enableMixedProviders = mixedProvidersEnabled;
     state.mixedProviders = config.mixedProviders || null;
-    if (mixedProvidersCheckbox) {
-      mixedProvidersCheckbox.checked = mixedProvidersEnabled;
-    }
     
     // Restore mixed tabs from saved config
     if (state.mixedProviders && state.mixedProviders.enabled) {
@@ -3012,11 +2985,7 @@
       };
     }
     
-    // Show/hide mixed providers section and status
-    const mixedProvidersSection = document.getElementById('mixedProvidersSection');
-    if (mixedProvidersSection) {
-      mixedProvidersSection.style.display = state.twoModelMode ? 'block' : 'none';
-    }
+    // Show/hide mixed providers status
     const mixedProvidersStatus = document.getElementById('mixedProvidersStatus');
     if (mixedProvidersStatus) {
       mixedProvidersStatus.style.display = 'none'; // Replaced by distinct UI cards
@@ -3347,24 +3316,26 @@
   function updateMixedProvidersUI() {
     const tabBar = document.getElementById('providerTabBar');
     const addBtn = document.getElementById('addProviderTabBtn');
-    const checkbox = document.getElementById('mixedProvidersCheckbox');
     const providerCardTitle = document.getElementById('providerCardTitle');
     
     const flagEnabled = state.featureFlags.enableMixedProviders;
-    const mixedActive = state.twoModelMode && flagEnabled && checkbox?.checked;
+    const showTabHeader = state.twoModelMode;
 
     if (tabBar) {
-      tabBar.style.display = flagEnabled ? 'flex' : 'none';
-      if (providerCardTitle) providerCardTitle.style.display = flagEnabled ? 'none' : 'block';
+      tabBar.style.display = showTabHeader ? 'flex' : 'none';
+      if (providerCardTitle) providerCardTitle.style.display = showTabHeader ? 'none' : 'block';
     }
 
-    // Update [+] button visibility
+    const primaryTab = document.getElementById('providerTab-primary');
+    if (primaryTab) {
+      primaryTab.textContent = flagEnabled ? 'Provider 1' : 'Provider';
+    }
+
     if (addBtn) {
-      addBtn.style.display = (flagEnabled && mixedTabState.tabCount < 2) ? 'inline-block' : 'none';
+      addBtn.style.display = (state.twoModelMode && mixedTabState.tabCount < 2) ? 'inline-block' : 'none';
     }
 
-    // Restore primary tab view if mixed mode just got disabled
-    if (!mixedActive && !flagEnabled && mixedTabState.activeTab !== 'primary') {
+    if (!showTabHeader && mixedTabState.activeTab !== 'primary') {
       switchToTab('primary');
     }
 
@@ -3378,23 +3349,20 @@
   function initMixedTabListeners() {
     const addBtn = document.getElementById('addProviderTabBtn');
     addBtn?.addEventListener('click', () => {
+      if (!state.twoModelMode) return;
       if (mixedTabState.tabCount >= 2) return;
-      
-      // Auto-enable mode UI if not already
-      const checkbox = document.getElementById('mixedProvidersCheckbox');
-      const threeToggle = document.getElementById('threeModelToggle');
-      if (checkbox && !checkbox.checked) {
-        checkbox.checked = true;
+
+      if (!mixedTabState.providerIds.primary) {
+        mixedTabState.providerIds.primary = state.provider;
+      }
+
+      if (!state.featureFlags.enableMixedProviders) {
         state.featureFlags.enableMixedProviders = true;
         vscode.postMessage({
           type: 'updateFeatureFlag',
           flag: 'enableMixedProviders',
           value: true
         });
-      }
-      if (threeToggle && !threeToggle.checked) {
-        threeToggle.checked = true;
-        onTwoModelToggle({ target: threeToggle });
       }
 
       mixedTabState.tabCount++;
@@ -3434,6 +3402,30 @@
         if (closeId) removeTab(closeId);
       });
     });
+  }
+
+  function deactivateMixedProviderTabs() {
+    if (!state.featureFlags.enableMixedProviders && mixedTabState.tabCount === 0) return;
+
+    mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    mixedTabState.activeTab = 'primary';
+    mixedTabState.tabCount = 0;
+    mixedTabState.providerIds['1'] = '';
+    mixedTabState.providerIds['2'] = '';
+    state.featureFlags.enableMixedProviders = false;
+
+    const provider2Tab = document.getElementById('providerTab-1');
+    const provider3Tab = document.getElementById('providerTab-2');
+    if (provider2Tab) provider2Tab.style.display = 'none';
+    if (provider3Tab) provider3Tab.style.display = 'none';
+
+    vscode.postMessage({
+      type: 'updateFeatureFlag',
+      flag: 'enableMixedProviders',
+      value: false
+    });
+
+    saveMixedState();
   }
 
   function switchToTab(tabId) {
@@ -3549,9 +3541,16 @@
 
     mixedTabState.tabCount = Math.max(0, mixedTabState.tabCount - 1);
 
-    const addBtn = document.getElementById('addProviderTabBtn');
-    if (addBtn) addBtn.style.display = 'inline-block';
+    if (mixedTabState.tabCount === 0 && state.featureFlags.enableMixedProviders) {
+      state.featureFlags.enableMixedProviders = false;
+      vscode.postMessage({
+        type: 'updateFeatureFlag',
+        flag: 'enableMixedProviders',
+        value: false
+      });
+    }
 
+    updateMixedProvidersUI();
     saveMixedState();
   }
 
@@ -3567,9 +3566,11 @@
       completion: { providerId: cProvider, model: state.modelsByProvider[cProvider]?.completion || '' },
       value: { providerId: vProvider, model: state.modelsByProvider[vProvider]?.value || '' }
     };
+    const routeConfigComplete = Object.values(tierMap)
+      .every(tier => tier.providerId && tier.model);
 
     const mixedConfig = {
-      enabled: Boolean(state.featureFlags.enableMixedProviders && mixedTabState.tabCount > 0),
+      enabled: Boolean(state.featureFlags.enableMixedProviders && mixedTabState.tabCount > 0 && routeConfigComplete),
       reasoning: buildTierPayload(tierMap.reasoning),
       completion: buildTierPayload(tierMap.completion),
       value: buildTierPayload(tierMap.value)

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ManualEntryError = void 0;
+exports.STATIC_PROVIDER_MODELS = exports.ManualEntryError = void 0;
 exports.listModels = listModels;
 const undici_1 = require("undici");
 const endpoints_1 = require("./endpoints");
@@ -12,6 +12,20 @@ class ManualEntryError extends Error {
     }
 }
 exports.ManualEntryError = ManualEntryError;
+exports.STATIC_PROVIDER_MODELS = {
+    minimax: [
+        'MiniMax-M2.7',
+        'MiniMax-M2.7-highspeed',
+        'MiniMax-M2.5',
+        'MiniMax-M2.5-highspeed',
+        'MiniMax-M2.1',
+        'MiniMax-M2.1-highspeed',
+        'MiniMax-M2',
+    ],
+    kimi: [
+        'kimi-for-coding',
+    ],
+};
 /**
  * Fetches a JSON model list from the given URL with provider-aware timeouts, exponential backoff retries, and an overall time budget.
  *
@@ -234,12 +248,9 @@ async function listModels(provider, baseUrl, apiKey) {
     if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) {
         throw new Error('Custom provider requires a base URL');
     }
-    // KHA-267: Endpoints that do not implement standard /v1/models JSON responses should trigger the Manual Entry UI
-    if (provider === 'minimax') {
-        throw new ManualEntryError('Minimax');
-    }
-    if (provider === 'kimi') {
-        throw new ManualEntryError('Kimi');
+    const staticModels = exports.STATIC_PROVIDER_MODELS[provider];
+    if (staticModels) {
+        return [...staticModels];
     }
     // Comment 3: Track start time for overall budget tracking
     const startTime = Date.now();
