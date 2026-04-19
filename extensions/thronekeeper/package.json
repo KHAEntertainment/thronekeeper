@@ -1,7 +1,7 @@
 {
   "name": "thronekeeper",
   "displayName": "Thronekeeper",
-  "publisher": "thehive",
+  "publisher": "khaentertainment",
   "description": "Configure and run Thronekeeper proxy with secure credential storage and model routing.",
   "version": "1.5.71",
   "icon": "images/thronekeeper-logo.jpg",
