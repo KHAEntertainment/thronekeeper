@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import request from 'supertest'
-import { startUpstreamMock, spawnProxyProcess, stopChild } from './utils.js'
+import { findAvailablePort, startUpstreamMock, spawnProxyProcess, stopChild } from './utils.js'
 
 describe('POST /v1/messages (errors)', () => {
   it('returns 400 when no usable API key is found', async () => {
     const upstream = await startUpstreamMock({ mode: 'json' })
-    const proxyPort = 3114
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,
@@ -33,7 +33,7 @@ describe('POST /v1/messages (errors)', () => {
       sseChunks: [],
       sseTerminator: ''
     })
-    const proxyPort = 3115
+    const proxyPort = await findAvailablePort()
     const child = await spawnProxyProcess({
       port: proxyPort,
       baseUrl: `http://127.0.0.1:${upstream.port}`,

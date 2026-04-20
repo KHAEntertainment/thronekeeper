@@ -708,7 +708,7 @@ fastify.post('/v1/debug/echo', async (request, reply) => {
       },
     }))
 
-    const selectedModel = payload.model 
+    const selectedModel = payload.model
       || (payload.thinking ? models.reasoning : models.completion)
 
     // Conditionally inject XML tool instructions for models that need them
@@ -1096,7 +1096,8 @@ fastify.post('/v1/messages', async (request, reply) => {
       },
     }))
     const responseWarnings = []
-    const selectedModel = payload.model 
+    const selectedModel = routedContext?.model
+      || payload.model
       || (payload.thinking ? models.reasoning : models.completion)
     const toolStyle = getModelToolStyle(selectedModel, effectiveProvider)
     const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider)
@@ -1540,6 +1541,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     let nextContentBlockIndex = 0
     let encounteredToolCall = false
     const toolCallAccumulators = {}  // key: tool call index, value: accumulated arguments string
+    const toolCallIndexMap = new Map()  // key: upstream tool call index, value: Anthropic content block index
     let chunkBuffer = ''  // Buffer for incomplete JSON chunks
     const decoder = new TextDecoder('utf-8')
     const reader = openaiResponse.body.getReader()
@@ -1661,7 +1663,7 @@ fastify.post('/v1/messages', async (request, reply) => {
               })
             }
             if (encounteredToolCall) {
-              for (const idx in toolCallAccumulators) {
+              for (const idx of Object.keys(toolCallAccumulators)) {
                 sendSSE(reply, 'content_block_stop', {
                   type: 'content_block_stop',
                   index: parseInt(idx, 10)
@@ -1718,7 +1720,11 @@ fastify.post('/v1/messages', async (request, reply) => {
           if (delta && delta.tool_calls) {
             for (const toolCall of delta.tool_calls) {
               encounteredToolCall = true
-              const idx = toolCall.index
+              const upstreamToolIndex = String(toolCall.index ?? 0)
+              if (!toolCallIndexMap.has(upstreamToolIndex)) {
+                toolCallIndexMap.set(upstreamToolIndex, nextContentBlockIndex++)
+              }
+              const idx = toolCallIndexMap.get(upstreamToolIndex)
               if (toolCallAccumulators[idx] === undefined) {
                 toolCallAccumulators[idx] = ""
                 await sendContentSSE('content_block_start', {

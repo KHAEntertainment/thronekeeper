@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ClaudeThroneConfigSchema = exports.MixedProviderConfigSchema = exports.TierProviderBindingSchema = exports.CustomEndpointKindSchema = exports.ConfigurationTargetSchema = exports.ProviderIdSchema = void 0;
+exports.ClaudeThroneConfigSchema = exports.MixedProviderConfigSchema = exports.TierProviderBindingSchema = exports.CustomEndpointKindSchema = exports.ProviderMapSchema = exports.ConfigurationTargetSchema = exports.ProviderIdSchema = void 0;
 exports.normalizeProviderMap = normalizeProviderMap;
 exports.hydrateGlobalKeysFromProvider = hydrateGlobalKeysFromProvider;
 exports.needsFallbackHydration = needsFallbackHydration;
@@ -9,7 +9,6 @@ exports.safeValidateConfig = safeValidateConfig;
 exports.validateProviderMap = validateProviderMap;
 exports.checkConfigurationInvariants = checkConfigurationInvariants;
 const zod_1 = require("zod");
-const messages_1 = require("./messages");
 /**
  * Configuration Schema Definitions
  *
@@ -38,9 +37,30 @@ exports.ProviderIdSchema = zod_1.z.enum([
  */
 exports.ConfigurationTargetSchema = zod_1.z.enum(['workspace', 'global']);
 /**
+ * Provider map structure (canonical storage format)
+ *
+ * Note: 'coding' is a deprecated alias for 'completion' - use 'completion' for all writes
+ */
+exports.ProviderMapSchema = zod_1.z.object({
+    reasoning: zod_1.z.string(),
+    completion: zod_1.z.string(), // Canonical storage key
+    /** @deprecated Use 'completion' instead */
+    coding: zod_1.z.string().optional(), // Read-only fallback for backward compatibility
+    value: zod_1.z.string()
+});
+/**
  * Custom endpoint kind
  */
 exports.CustomEndpointKindSchema = zod_1.z.enum(['auto', 'openai', 'anthropic']);
+const TierEndpointKindSchema = zod_1.z
+    .enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native'])
+    .transform(kind => {
+    if (kind === 'openai-compatible')
+        return 'openai';
+    if (kind === 'anthropic-native')
+        return 'anthropic';
+    return kind;
+});
 // ============================================================================
 // KHA-267: Mixed Provider Types
 // ============================================================================
@@ -54,7 +74,7 @@ exports.TierProviderBindingSchema = zod_1.z.object({
     baseUrl: zod_1.z.string().trim().min(1), // Upstream base URL for this provider
     model: zod_1.z.string().trim().min(1), // Model ID at the upstream provider (without namespace)
     displayModel: zod_1.z.string().trim().min(1).optional(), // Namespaced display name (e.g., 'glm/glm-5.1')
-    endpointKind: zod_1.z.enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native']).optional(),
+    endpointKind: TierEndpointKindSchema.optional(),
 });
 /**
  * Mixed-provider configuration — enables per-tier provider routing.
@@ -93,7 +113,7 @@ exports.ClaudeThroneConfigSchema = zod_1.z.object({
     customBaseUrl: zod_1.z.string().optional(),
     customEndpointKind: exports.CustomEndpointKindSchema.default('auto'),
     // Model selections (provider-scoped - NEW FORMAT)
-    modelSelectionsByProvider: zod_1.z.record(zod_1.z.string(), messages_1.ProviderMapSchema).default({}),
+    modelSelectionsByProvider: zod_1.z.record(zod_1.z.string(), exports.ProviderMapSchema).default({}),
     // Legacy global model keys (for backward compatibility and fallback)
     reasoningModel: zod_1.z.string().optional(),
     completionModel: zod_1.z.string().optional(),
@@ -228,7 +248,7 @@ function safeValidateConfig(config) {
  * @throws ZodError if `map` does not conform to ProviderMapSchema
  */
 function validateProviderMap(map) {
-    return messages_1.ProviderMapSchema.parse(map);
+    return exports.ProviderMapSchema.parse(map);
 }
 // ============================================================================
 // Configuration Invariant Checks
@@ -248,18 +268,21 @@ function checkConfigurationInvariants(config) {
                 `This violates the canonical storage invariant.`);
         }
     }
-    // Check 2: Verify active provider has configuration
-    const activeProvider = config.provider || 'openrouter';
-    const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider];
-    if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
-        violations.push(`Active provider '${activeProvider}' has no model selections. ` +
-            `This may cause proxy start failures.`);
-    }
-    // Check 3: Verify two-model mode has all required models
-    if (config.twoModelMode) {
-        const normalized = normalizeProviderMap(activeProviderMap);
-        if (!normalized.completion || !normalized.value) {
-            violations.push(`Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`);
+    const mixedProvidersEnabled = Boolean(config.mixedProviders?.enabled);
+    if (!mixedProvidersEnabled) {
+        // Check 2: Verify active provider has configuration
+        const activeProvider = config.provider || 'openrouter';
+        const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider];
+        if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
+            violations.push(`Active provider '${activeProvider}' has no model selections. ` +
+                `This may cause proxy start failures.`);
+        }
+        // Check 3: Verify two-model mode has all required models
+        if (config.twoModelMode) {
+            const normalized = normalizeProviderMap(activeProviderMap);
+            if (!normalized.completion || !normalized.value) {
+                violations.push(`Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`);
+            }
         }
     }
     // Check 4 (KHA-267): Verify mixed-provider config consistency

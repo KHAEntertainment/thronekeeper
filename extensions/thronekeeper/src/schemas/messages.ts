@@ -9,7 +9,12 @@
  */
 
 import { z } from 'zod'
-import { TierProviderBindingSchema, MixedProviderConfigSchema } from './config'
+import {
+  ProviderMapSchema,
+  TierProviderBindingSchema,
+  MixedProviderConfigSchema,
+} from './config'
+export { ProviderMapSchema } from './config'
 
 // ============================================================================
 // Legacy Message Type Normalization
@@ -70,19 +75,6 @@ export const ModelInfoSchema = z.object({
 })
 
 export type ModelInfo = z.infer<typeof ModelInfoSchema>
-
-/**
- * Provider map structure (canonical storage format)
- * 
- * Note: 'coding' is a deprecated alias for 'completion' - use 'completion' for all writes
- */
-export const ProviderMapSchema = z.object({
-  reasoning: z.string(),
-  completion: z.string(),  // Canonical storage key
-  /** @deprecated Use 'completion' instead */
-  coding: z.string().optional(),  // Read-only fallback for backward compatibility
-  value: z.string()
-})
 
 export type ProviderMap = z.infer<typeof ProviderMapSchema>
 

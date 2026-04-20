@@ -33903,6 +33903,12 @@ function normalizeEndpointKind(endpointKind2) {
   if (kind === "openai" || kind === "openai-compatible") return "openai";
   return "auto";
 }
+function normalizeProviderBaseUrl(baseUrl2) {
+  return (baseUrl2 || "").replace(/\/+$/, "").replace(/\/v\d+$/i, "");
+}
+function contextsShareUpstream(a, b) {
+  return Boolean(a && b) && a.providerId === b.providerId && a.baseUrl === b.baseUrl && a.endpointKind === b.endpointKind && a.key === b.key && a.model === b.model;
+}
 function normalizeMixedProviderConfig(input) {
   const source = { ...input };
   if (!source.completion && source.coding) {
@@ -33948,6 +33954,7 @@ var ProviderContext = class {
    * @param {string} config.baseUrl - Upstream base URL (e.g., 'https://api.z.ai/api/anthropic')
    * @param {string} config.key - API key for this provider
    * @param {string} config.model - Model name at the upstream provider (without namespace prefix)
+   * @param {string} [config.displayModel] - Model name exposed to clients for route lookup
    * @param {string} config.tier - Which tier this context serves: 'reasoning', 'completion', or 'value'
    * @param {string} [config.endpointKind] - Override endpoint kind; auto-detected if omitted
    * @param {Object<string,string>} [config.endpointOverrides] - Optional endpoint kind overrides map
@@ -33957,14 +33964,16 @@ var ProviderContext = class {
     baseUrl: baseUrl2,
     key: key2,
     model: model2,
+    displayModel,
     tier,
     endpointKind: endpointKind2,
     endpointOverrides = {}
   }) {
     this.providerId = providerId;
-    this.baseUrl = (baseUrl2 || "").replace(/\/+$/, "");
+    this.baseUrl = normalizeProviderBaseUrl(baseUrl2);
     this.key = key2;
     this.model = model2;
+    this.displayModel = typeof displayModel === "string" ? displayModel : null;
     this.tier = tier;
     const normalizedEndpointKind = normalizeEndpointKind(endpointKind2);
     if (normalizedEndpointKind !== "auto") {
@@ -33974,7 +33983,7 @@ var ProviderContext = class {
         this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE;
       }
     } else {
-      this.endpointKind = inferEndpointKindSync(providerId, baseUrl2, endpointOverrides);
+      this.endpointKind = inferEndpointKindSync(providerId, this.baseUrl, endpointOverrides);
     }
     if (!this.endpointKind) {
       throw new Error(`[ProviderContext] Unable to infer endpoint kind for provider "${providerId}"`);
@@ -34029,6 +34038,7 @@ var ProviderContext = class {
       providerId: this.providerId,
       baseUrl: this.baseUrl,
       model: this.model,
+      displayModel: this.displayModel,
       tier: this.tier,
       endpointKind: this.endpointKind,
       hasKey: !!this.key
@@ -34072,19 +34082,25 @@ var ProviderRouter = class {
     };
     this.tierMap = /* @__PURE__ */ new Map();
     this.normalizedTierMap = /* @__PURE__ */ new Map();
-    for (const [tier, ctx] of Object.entries(this.contexts)) {
-      if (ctx.model) {
-        const normalizedModel = ctx.model.toLowerCase();
-        const existing = this.normalizedTierMap.get(normalizedModel);
-        if (existing) {
-          throw new Error(
-            `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
-          );
+    const registerModelName = (modelName, tier, ctx) => {
+      if (!modelName) return;
+      const normalizedModel = modelName.toLowerCase();
+      const existing = this.normalizedTierMap.get(normalizedModel);
+      if (existing) {
+        if (contextsShareUpstream(existing.context, ctx)) {
+          return;
         }
-        const entry = { tier, context: ctx };
-        this.tierMap.set(ctx.model, entry);
-        this.normalizedTierMap.set(normalizedModel, entry);
+        throw new Error(
+          `[ProviderRouter] Model "${modelName}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+        );
       }
+      const entry = { tier, context: ctx };
+      this.tierMap.set(modelName, entry);
+      this.normalizedTierMap.set(normalizedModel, entry);
+    };
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      registerModelName(ctx.model, tier, ctx);
+      registerModelName(ctx.displayModel, tier, ctx);
     }
   }
   /**
@@ -35296,7 +35312,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       }
     }));
     const responseWarnings = [];
-    const selectedModel = payload.model || (payload.thinking ? models.reasoning : models.completion);
+    const selectedModel = routedContext?.model || payload.model || (payload.thinking ? models.reasoning : models.completion);
     const toolStyle = getModelToolStyle(selectedModel, effectiveProvider);
     const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider);
     const hasTooluseTransformer = transformerConfigs.some((config) => {
@@ -35598,6 +35614,7 @@ ${toolInstructions}`;
     let nextContentBlockIndex = 0;
     let encounteredToolCall = false;
     const toolCallAccumulators = {};
+    const toolCallIndexMap = /* @__PURE__ */ new Map();
     let chunkBuffer = "";
     const decoder = new import_util.TextDecoder("utf-8");
     const reader = openaiResponse.body.getReader();
@@ -35703,7 +35720,7 @@ ${toolInstructions}`;
                 });
               }
               if (encounteredToolCall) {
-                for (const idx in toolCallAccumulators) {
+                for (const idx of Object.keys(toolCallAccumulators)) {
                   sendSSE(reply, "content_block_stop", {
                     type: "content_block_stop",
                     index: parseInt(idx, 10)
@@ -35752,7 +35769,11 @@ ${toolInstructions}`;
             if (delta && delta.tool_calls) {
               for (const toolCall of delta.tool_calls) {
                 encounteredToolCall = true;
-                const idx = toolCall.index;
+                const upstreamToolIndex = String(toolCall.index ?? 0);
+                if (!toolCallIndexMap.has(upstreamToolIndex)) {
+                  toolCallIndexMap.set(upstreamToolIndex, nextContentBlockIndex++);
+                }
+                const idx = toolCallIndexMap.get(upstreamToolIndex);
                 if (toolCallAccumulators[idx] === void 0) {
                   toolCallAccumulators[idx] = "";
                   await sendContentSSE("content_block_start", {

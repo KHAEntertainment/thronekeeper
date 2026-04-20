@@ -329,7 +329,12 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             await this.handleSaveModels({providerId: msg.providerId, reasoning: msg.reasoning, completion: msg.completion, value: msg.value})
             break
           case 'setModelFromList':
-            await this.handleSetModelFromList(msg.modelId, msg.modelType)
+            await this.handleSetModelFromList({
+              modelId: msg.modelId,
+              model: msg.model,
+              modelType: msg.modelType,
+              provider: msg.provider,
+            })
             break
           case 'toggleThreeModelMode':
             // Comment 3: Handle canonical toggleThreeModelMode message
@@ -1377,87 +1382,108 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       let reasoningModel = ''
       let completionModel = ''
       let valueModel = ''
+      const mixedRoutingEnabled = Boolean(mixedProviders?.enabled)
       
-      this.log.appendLine(`[handleStartProxy] Reading models for provider: ${this.runtimeProvider}`)
-      this.log.appendLine(`[handleStartProxy] Full modelSelectionsByProvider: ${JSON.stringify(modelSelectionsByProvider)}`)
-      
-      if (modelSelectionsByProvider[this.runtimeProvider]) {
-        // Comment 3: Normalize provider map before reading
-        const normalized = this.normalizeProviderMap(modelSelectionsByProvider[this.runtimeProvider], this.runtimeProvider)
-        reasoningModel = normalized.reasoning
-        completionModel = normalized.completion
-        valueModel = normalized.value
-        
-        this.log.appendLine(`[handleStartProxy] Found provider-specific models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`)
+      let hasProviderSpecific = false
+      let reasoningSource = 'from global fallback'
+      let completionSource = 'from global fallback'
+      let valueSource = 'from global fallback'
+
+      if (mixedProviders?.enabled) {
+        const enabledMixedProviders = mixedProviders
+        reasoningModel = enabledMixedProviders.reasoning.model
+        completionModel = enabledMixedProviders.completion.model
+        valueModel = enabledMixedProviders.value.model
+        hasProviderSpecific = true
+        reasoningSource = `from mixed provider config (${enabledMixedProviders.reasoning.providerId})`
+        completionSource = `from mixed provider config (${enabledMixedProviders.completion.providerId})`
+        valueSource = `from mixed provider config (${enabledMixedProviders.value.providerId})`
+        this.log.appendLine(`[handleStartProxy] Using mixed-provider models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`)
       } else {
-        this.log.appendLine(`[handleStartProxy] No models found for provider ${this.runtimeProvider} in modelSelectionsByProvider`)
-      }
-      
-      // Fallback to global keys if provider-specific not found, with explicit confirmation
-      if (!reasoningModel) {
-        const fallbackReasoning = cfg.get<string>('reasoningModel', '')
-        if (fallbackReasoning) {
-          const useFallback = await vscode.window.showWarningMessage(
-            `No reasoning model selected for provider "${this.runtimeProvider}". Using global model "${fallbackReasoning}" which may be from a different provider. Continue anyway?`,
-            'Continue',
-            'Cancel'
-          )
+        this.log.appendLine(`[handleStartProxy] Reading models for provider: ${this.runtimeProvider}`)
+        this.log.appendLine(`[handleStartProxy] Full modelSelectionsByProvider: ${JSON.stringify(modelSelectionsByProvider)}`)
+        
+        if (modelSelectionsByProvider[this.runtimeProvider]) {
+          // Comment 3: Normalize provider map before reading
+          const normalized = this.normalizeProviderMap(modelSelectionsByProvider[this.runtimeProvider], this.runtimeProvider)
+          reasoningModel = normalized.reasoning
+          completionModel = normalized.completion
+          valueModel = normalized.value
           
-          if (useFallback !== 'Continue') {
-            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
-            return
-          }
-          
-          reasoningModel = fallbackReasoning
-          this.log.appendLine(`[handleStartProxy] Falling back to global reasoningModel: ${reasoningModel}`)
-          this.log.appendLine(`[handleStartProxy] WARNING: Using fallback global keys. This may indicate a configuration save issue.`)
+          this.log.appendLine(`[handleStartProxy] Found provider-specific models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`)
+        } else {
+          this.log.appendLine(`[handleStartProxy] No models found for provider ${this.runtimeProvider} in modelSelectionsByProvider`)
         }
-      }
-      if (!completionModel) {
-        const fallbackCompletion = cfg.get<string>('completionModel', '')
-        if (fallbackCompletion) {
-          const useFallback = await vscode.window.showWarningMessage(
-            `No completion model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackCompletion}" which may be from a different provider. Continue anyway?`,
-            'Continue',
-            'Cancel'
-          )
-          
-          if (useFallback !== 'Continue') {
-            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
-            return
+        
+        // Fallback to global keys if provider-specific not found, with explicit confirmation
+        if (!reasoningModel) {
+          const fallbackReasoning = cfg.get<string>('reasoningModel', '')
+          if (fallbackReasoning) {
+            const useFallback = await vscode.window.showWarningMessage(
+              `No reasoning model selected for provider "${this.runtimeProvider}". Using global model "${fallbackReasoning}" which may be from a different provider. Continue anyway?`,
+              'Continue',
+              'Cancel'
+            )
+            
+            if (useFallback !== 'Continue') {
+              this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
+              return
+            }
+            
+            reasoningModel = fallbackReasoning
+            this.log.appendLine(`[handleStartProxy] Falling back to global reasoningModel: ${reasoningModel}`)
+            this.log.appendLine(`[handleStartProxy] WARNING: Using fallback global keys. This may indicate a configuration save issue.`)
           }
-          
-          completionModel = fallbackCompletion
-          this.log.appendLine(`[handleStartProxy] Falling back to global completionModel: ${completionModel}`)
         }
-      }
-      
-      if (!valueModel) {
-        const fallbackValue = cfg.get<string>('valueModel', '')
-        if (fallbackValue) {
-          const useFallback = await vscode.window.showWarningMessage(
-            `No value model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackValue}" which may be from a different provider. Continue anyway?`,
-            'Continue',
-            'Cancel'
-          )
-          
-          if (useFallback !== 'Continue') {
-            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
-            return
+        if (!completionModel) {
+          const fallbackCompletion = cfg.get<string>('completionModel', '')
+          if (fallbackCompletion) {
+            const useFallback = await vscode.window.showWarningMessage(
+              `No completion model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackCompletion}" which may be from a different provider. Continue anyway?`,
+              'Continue',
+              'Cancel'
+            )
+            
+            if (useFallback !== 'Continue') {
+              this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
+              return
+            }
+            
+            completionModel = fallbackCompletion
+            this.log.appendLine(`[handleStartProxy] Falling back to global completionModel: ${completionModel}`)
           }
-          
-          valueModel = fallbackValue
-          this.log.appendLine(`[handleStartProxy] Falling back to global valueModel: ${valueModel}`)
         }
+        
+        if (!valueModel) {
+          const fallbackValue = cfg.get<string>('valueModel', '')
+          if (fallbackValue) {
+            const useFallback = await vscode.window.showWarningMessage(
+              `No value model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackValue}" which may be from a different provider. Continue anyway?`,
+              'Continue',
+              'Cancel'
+            )
+            
+            if (useFallback !== 'Continue') {
+              this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`)
+              return
+            }
+            
+            valueModel = fallbackValue
+            this.log.appendLine(`[handleStartProxy] Falling back to global valueModel: ${valueModel}`)
+          }
+        }
+          
+        // Log the source of each model
+        hasProviderSpecific = Boolean(modelSelectionsByProvider[this.runtimeProvider]?.reasoning)
+        reasoningSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback'
+        completionSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback'
+        valueSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback'
       }
-      
-      // Log the source of each model
-      const hasProviderSpecific = modelSelectionsByProvider[this.runtimeProvider] && 
-                               modelSelectionsByProvider[this.runtimeProvider].reasoning
+
       this.log.appendLine(`[handleStartProxy] Model source - Provider-specific: ${hasProviderSpecific ? 'YES' : 'NO'}, Fallback used: ${hasProviderSpecific ? 'NO' : 'YES'}`)
       
       // Comment 9: Post configWarning when fallback occurs
-      if (!hasProviderSpecific && reasoningModel) {
+      if (!mixedRoutingEnabled && !hasProviderSpecific && reasoningModel) {
         this.post({
           type: 'configWarning',
           payload: {
@@ -1517,7 +1543,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       
       // Add validation before starting proxy for stale fallback usage
       
-      if (!hasProviderSpecific && reasoningModel) {
+      if (!mixedRoutingEnabled && !hasProviderSpecific && reasoningModel) {
         // Check if we're using stale fallback values (e.g., GPT models for Deepseek provider)
         const isStaleCombination = 
           (this.runtimeProvider === 'deepseek' && reasoningModel.includes('gpt')) ||
@@ -1549,12 +1575,13 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       }
       
       // Log the final models that will be used
-      const reasoningSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback'
-      const completionSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback'
       this.log.appendLine(`[handleStartProxy] Final models for proxy start:`)
       this.log.appendLine(`[handleStartProxy] - reasoning=${reasoningModel} (${reasoningSource})`)
       if (completionModel) {
         this.log.appendLine(`[handleStartProxy] - completion=${completionModel} (${completionSource})`)
+      }
+      if (valueModel) {
+        this.log.appendLine(`[handleStartProxy] - value=${valueModel} (${valueSource})`)
       }
       
       this.log.appendLine(`[handleStartProxy] Starting proxy: provider=${this.runtimeProvider}, port=${port}, twoModelMode=${twoModelMode}`)

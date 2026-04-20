@@ -96,6 +96,34 @@ describe('ProviderContext', () => {
     expect(ctx.getUpstreamUrl()).toBe('https://openrouter.ai/api/v1/chat/completions')
   })
 
+  it('does not duplicate version paths for pre-versioned OpenAI-compatible baseUrl', () => {
+    const ctx = new ProviderContext({
+      providerId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      key: 'key',
+      model: 'gpt-4o',
+      tier: 'completion',
+      endpointKind: 'openai',
+    })
+
+    expect(ctx.baseUrl).toBe('https://api.openai.com')
+    expect(ctx.getUpstreamUrl()).toBe('https://api.openai.com/v1/chat/completions')
+  })
+
+  it('does not duplicate version paths for pre-versioned baseUrl with trailing slash', () => {
+    const ctx = new ProviderContext({
+      providerId: 'together',
+      baseUrl: 'https://api.together.xyz/v1/',
+      key: 'key',
+      model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      tier: 'completion',
+      endpointKind: 'openai',
+    })
+
+    expect(ctx.baseUrl).toBe('https://api.together.xyz')
+    expect(ctx.getUpstreamUrl()).toBe('https://api.together.xyz/v1/chat/completions')
+  })
+
   it('builds Anthropic headers for Anthropic-native providers', () => {
     const ctx = new ProviderContext({
       providerId: 'glm',
@@ -315,14 +343,46 @@ describe('ProviderRouter', () => {
     expect(() => new ProviderRouter(config)).toThrow(/duplicate|multiple/i)
   })
 
-  it('rejects duplicate model IDs even when tiers share the same upstream context', () => {
+  it('allows duplicate model IDs when tiers share the same upstream context', () => {
     const config = {
       reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key', model: 'shared-model' },
       completion: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key', model: 'shared-model' },
       value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'kimi-key', model: 'kimi-k2.5' },
     }
 
+    const router = new ProviderRouter(config)
+    expect(router.resolve('shared-model').context.model).toBe('shared-model')
+  })
+
+  it('rejects duplicate model IDs when same provider context uses a different key', () => {
+    const config = {
+      reasoning: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key-1', model: 'shared-model' },
+      completion: { providerId: 'glm', baseUrl: 'https://api.z.ai/api/anthropic', key: 'glm-key-2', model: 'shared-model' },
+      value: { providerId: 'kimi', baseUrl: 'https://api.kimi.com/coding', key: 'kimi-key', model: 'kimi-k2.5' },
+    }
+
     expect(() => new ProviderRouter(config)).toThrow(/duplicate|multiple/i)
+  })
+
+  it('resolves displayModel names but keeps upstream model on routed context', () => {
+    const config = {
+      reasoning: {
+        providerId: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        key: 'openai-key',
+        model: 'gpt-4o',
+        displayModel: 'openai/gpt-4o',
+        endpointKind: 'openai',
+      },
+      completion: baseMixedConfig.completion,
+      value: baseMixedConfig.value,
+    }
+
+    const router = new ProviderRouter(config)
+    const resolved = router.resolve('openai/gpt-4o')
+
+    expect(resolved.context.model).toBe('gpt-4o')
+    expect(resolved.context.getUpstreamUrl()).toBe('https://api.openai.com/v1/chat/completions')
   })
 
   it('produces safe debug output', () => {

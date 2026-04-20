@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { ProviderMapSchema } from './messages'
 
 /**
  * Configuration Schema Definitions
@@ -37,11 +36,34 @@ export const ConfigurationTargetSchema = z.enum(['workspace', 'global'])
 export type ConfigurationTarget = z.infer<typeof ConfigurationTargetSchema>
 
 /**
+ * Provider map structure (canonical storage format)
+ * 
+ * Note: 'coding' is a deprecated alias for 'completion' - use 'completion' for all writes
+ */
+export const ProviderMapSchema = z.object({
+  reasoning: z.string(),
+  completion: z.string(),  // Canonical storage key
+  /** @deprecated Use 'completion' instead */
+  coding: z.string().optional(),  // Read-only fallback for backward compatibility
+  value: z.string()
+})
+
+export type ProviderMap = z.infer<typeof ProviderMapSchema>
+
+/**
  * Custom endpoint kind
  */
 export const CustomEndpointKindSchema = z.enum(['auto', 'openai', 'anthropic'])
 
 export type CustomEndpointKind = z.infer<typeof CustomEndpointKindSchema>
+
+const TierEndpointKindSchema = z
+  .enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native'])
+  .transform(kind => {
+    if (kind === 'openai-compatible') return 'openai'
+    if (kind === 'anthropic-native') return 'anthropic'
+    return kind
+  })
 
 // ============================================================================
 // KHA-267: Mixed Provider Types
@@ -57,7 +79,7 @@ export const TierProviderBindingSchema = z.object({
   baseUrl: z.string().trim().min(1),         // Upstream base URL for this provider
   model: z.string().trim().min(1),           // Model ID at the upstream provider (without namespace)
   displayModel: z.string().trim().min(1).optional(),  // Namespaced display name (e.g., 'glm/glm-5.1')
-  endpointKind: z.enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native']).optional(),
+  endpointKind: TierEndpointKindSchema.optional(),
 })
 
 export type TierProviderBinding = z.infer<typeof TierProviderBindingSchema>
@@ -304,24 +326,28 @@ export function checkConfigurationInvariants(
     }
   }
   
-  // Check 2: Verify active provider has configuration
-  const activeProvider = config.provider || 'openrouter'
-  const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider]
-  
-  if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
-    violations.push(
-      `Active provider '${activeProvider}' has no model selections. ` +
-      `This may cause proxy start failures.`
-    )
-  }
-  
-  // Check 3: Verify two-model mode has all required models
-  if (config.twoModelMode) {
-    const normalized = normalizeProviderMap(activeProviderMap)
-    if (!normalized.completion || !normalized.value) {
+  const mixedProvidersEnabled = Boolean(config.mixedProviders?.enabled)
+
+  if (!mixedProvidersEnabled) {
+    // Check 2: Verify active provider has configuration
+    const activeProvider = config.provider || 'openrouter'
+    const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider]
+    
+    if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
       violations.push(
-        `Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`
+        `Active provider '${activeProvider}' has no model selections. ` +
+        `This may cause proxy start failures.`
       )
+    }
+    
+    // Check 3: Verify two-model mode has all required models
+    if (config.twoModelMode) {
+      const normalized = normalizeProviderMap(activeProviderMap)
+      if (!normalized.completion || !normalized.value) {
+        violations.push(
+          `Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`
+        )
+      }
     }
   }
   

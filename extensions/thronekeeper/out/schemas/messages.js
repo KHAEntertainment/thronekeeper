@@ -9,13 +9,15 @@
  * Last Updated: 2026-04-12
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WebviewToExtensionMessageSchema = exports.OpenExternalMessageSchema = exports.SimpleUpdateMessageSchema = exports.SimpleRequestMessageSchema = exports.DeleteCustomProviderMessageSchema = exports.SaveCustomProviderMessageSchema = exports.DeleteComboMessageSchema = exports.SaveComboMessageSchema = exports.SaveMixedProvidersMessageSchema = exports.ToggleOpusPlanMessageSchema = exports.ToggleTwoModelModeMessageSchema = exports.ToggleThreeModelModeMessageSchema = exports.RevertApplyMessageSchema = exports.StopProxyMessageSchema = exports.ProxyControlMessageSchema = exports.StoreKeyMessageSchema = exports.UpdateProviderMessageSchema = exports.SaveModelsMessageSchema = exports.RequestModelsMessageSchema = exports.ExtensionToWebviewMessageSchema = exports.ErrorMessageSchema = exports.ErrorMessagePayloadSchema = exports.CustomProvidersLoadedMessageSchema = exports.CombosLoadedMessageSchema = exports.ModelsSavedMessageSchema = exports.KeyStoredMessageSchema = exports.KeysLoadedMessageSchema = exports.PopularModelsMessageSchema = exports.ConfigLoadedMessageSchema = exports.ModelsLoadedMessageSchema = exports.StatusMessageSchema = exports.ModelComboSchema = exports.CustomProviderSchema = exports.ProviderMapSchema = exports.ModelInfoSchema = void 0;
+exports.WebviewToExtensionMessageSchema = exports.OpenExternalMessageSchema = exports.SimpleUpdateMessageSchema = exports.SimpleRequestMessageSchema = exports.DeleteCustomProviderMessageSchema = exports.SaveCustomProviderMessageSchema = exports.DeleteComboMessageSchema = exports.SaveComboMessageSchema = exports.SaveMixedProvidersMessageSchema = exports.ToggleOpusPlanMessageSchema = exports.ToggleTwoModelModeMessageSchema = exports.ToggleThreeModelModeMessageSchema = exports.RevertApplyMessageSchema = exports.StopProxyMessageSchema = exports.ProxyControlMessageSchema = exports.StoreKeyMessageSchema = exports.UpdateProviderMessageSchema = exports.SaveModelsMessageSchema = exports.RequestModelsMessageSchema = exports.ExtensionToWebviewMessageSchema = exports.ErrorMessageSchema = exports.ErrorMessagePayloadSchema = exports.CustomProvidersLoadedMessageSchema = exports.CombosLoadedMessageSchema = exports.ModelsSavedMessageSchema = exports.KeyStoredMessageSchema = exports.KeysLoadedMessageSchema = exports.PopularModelsMessageSchema = exports.ConfigLoadedMessageSchema = exports.ModelsLoadedMessageSchema = exports.StatusMessageSchema = exports.ModelComboSchema = exports.CustomProviderSchema = exports.ModelInfoSchema = exports.ProviderMapSchema = void 0;
 exports.normalizeMessageType = normalizeMessageType;
 exports.validateExtensionMessage = validateExtensionMessage;
 exports.validateWebviewMessage = validateWebviewMessage;
 exports.safeValidateMessage = safeValidateMessage;
 const zod_1 = require("zod");
 const config_1 = require("./config");
+var config_2 = require("./config");
+Object.defineProperty(exports, "ProviderMapSchema", { enumerable: true, get: function () { return config_2.ProviderMapSchema; } });
 // ============================================================================
 // Legacy Message Type Normalization
 // ============================================================================
@@ -66,18 +68,6 @@ exports.ModelInfoSchema = zod_1.z.object({
         prompt: zod_1.z.string(),
         completion: zod_1.z.string()
     }).optional()
-});
-/**
- * Provider map structure (canonical storage format)
- *
- * Note: 'coding' is a deprecated alias for 'completion' - use 'completion' for all writes
- */
-exports.ProviderMapSchema = zod_1.z.object({
-    reasoning: zod_1.z.string(),
-    completion: zod_1.z.string(), // Canonical storage key
-    /** @deprecated Use 'completion' instead */
-    coding: zod_1.z.string().optional(), // Read-only fallback for backward compatibility
-    value: zod_1.z.string()
 });
 /**
  * Custom provider definition
@@ -139,7 +129,7 @@ exports.ConfigLoadedMessageSchema = zod_1.z.object({
         cacheAgeDays: zod_1.z.number().optional(),
         cacheStale: zod_1.z.boolean().optional(),
         cachedDefaults: zod_1.z.any().optional(),
-        modelSelectionsByProvider: zod_1.z.record(zod_1.z.string(), exports.ProviderMapSchema),
+        modelSelectionsByProvider: zod_1.z.record(zod_1.z.string(), config_1.ProviderMapSchema),
         // Legacy global keys for fallback hydration
         reasoningModel: zod_1.z.string().optional(),
         completionModel: zod_1.z.string().optional(),

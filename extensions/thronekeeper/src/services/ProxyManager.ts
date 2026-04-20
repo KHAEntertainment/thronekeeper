@@ -521,6 +521,7 @@ export class ProxyManager {
             baseUrl: binding.baseUrl,
             key: providerKeys.get(binding.providerId) || null,
             model: binding.model,
+            displayModel: binding.displayModel || binding.model,
             endpointKind: binding.endpointKind || undefined,
           }
         }

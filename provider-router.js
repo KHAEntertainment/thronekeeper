@@ -25,6 +25,21 @@ function normalizeEndpointKind(endpointKind) {
   return 'auto'
 }
 
+function normalizeProviderBaseUrl(baseUrl) {
+  return (baseUrl || '')
+    .replace(/\/+$/, '')
+    .replace(/\/v\d+$/i, '')
+}
+
+function contextsShareUpstream(a, b) {
+  return Boolean(a && b) &&
+    a.providerId === b.providerId &&
+    a.baseUrl === b.baseUrl &&
+    a.endpointKind === b.endpointKind &&
+    a.key === b.key &&
+    a.model === b.model
+}
+
 function normalizeMixedProviderConfig(input) {
   const source = { ...input }
   if (!source.completion && source.coding) {
@@ -86,6 +101,7 @@ export class ProviderContext {
    * @param {string} config.baseUrl - Upstream base URL (e.g., 'https://api.z.ai/api/anthropic')
    * @param {string} config.key - API key for this provider
    * @param {string} config.model - Model name at the upstream provider (without namespace prefix)
+   * @param {string} [config.displayModel] - Model name exposed to clients for route lookup
    * @param {string} config.tier - Which tier this context serves: 'reasoning', 'completion', or 'value'
    * @param {string} [config.endpointKind] - Override endpoint kind; auto-detected if omitted
    * @param {Object<string,string>} [config.endpointOverrides] - Optional endpoint kind overrides map
@@ -95,14 +111,18 @@ export class ProviderContext {
     baseUrl,
     key,
     model,
+    displayModel,
     tier,
     endpointKind,
     endpointOverrides = {},
   }) {
     this.providerId = providerId
-    this.baseUrl = (baseUrl || '').replace(/\/+$/, '')
+    this.baseUrl = normalizeProviderBaseUrl(baseUrl)
     this.key = key
     this.model = model
+    this.displayModel = typeof displayModel === 'string'
+      ? displayModel
+      : null
     this.tier = tier
 
     // Resolve endpoint kind: explicit override > auto-detect
@@ -114,7 +134,7 @@ export class ProviderContext {
         this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE
       }
     } else {
-      this.endpointKind = inferEndpointKindSync(providerId, baseUrl, endpointOverrides)
+      this.endpointKind = inferEndpointKindSync(providerId, this.baseUrl, endpointOverrides)
     }
     if (!this.endpointKind) {
       throw new Error(`[ProviderContext] Unable to infer endpoint kind for provider "${providerId}"`)
@@ -176,6 +196,7 @@ export class ProviderContext {
       providerId: this.providerId,
       baseUrl: this.baseUrl,
       model: this.model,
+      displayModel: this.displayModel,
       tier: this.tier,
       endpointKind: this.endpointKind,
       hasKey: !!this.key,
@@ -232,20 +253,28 @@ export class ProviderRouter {
     // The proxy sets these model names in .claude/settings.json, so they are authoritative
     this.tierMap = new Map()
     this.normalizedTierMap = new Map()
-    for (const [tier, ctx] of Object.entries(this.contexts)) {
-      if (ctx.model) {
-        const normalizedModel = ctx.model.toLowerCase()
-        const existing = this.normalizedTierMap.get(normalizedModel)
-        if (existing) {
-          throw new Error(
-            `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
-          )
-        }
+    const registerModelName = (modelName, tier, ctx) => {
+      if (!modelName) return
 
-        const entry = { tier, context: ctx }
-        this.tierMap.set(ctx.model, entry)
-        this.normalizedTierMap.set(normalizedModel, entry)
+      const normalizedModel = modelName.toLowerCase()
+      const existing = this.normalizedTierMap.get(normalizedModel)
+      if (existing) {
+        if (contextsShareUpstream(existing.context, ctx)) {
+          return
+        }
+        throw new Error(
+          `[ProviderRouter] Model "${modelName}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+        )
       }
+
+      const entry = { tier, context: ctx }
+      this.tierMap.set(modelName, entry)
+      this.normalizedTierMap.set(normalizedModel, entry)
+    }
+
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      registerModelName(ctx.model, tier, ctx)
+      registerModelName(ctx.displayModel, tier, ctx)
     }
   }
 
