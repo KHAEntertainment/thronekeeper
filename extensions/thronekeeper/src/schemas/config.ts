@@ -67,12 +67,24 @@ export type TierProviderBinding = z.infer<typeof TierProviderBindingSchema>
  * When enabled, each model tier (reasoning/completion/value) can be served by
  * a different API provider with its own base URL, API key, and endpoint kind.
  */
-export const MixedProviderConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+const EnabledMixedProviderConfigSchema = z.object({
+  enabled: z.literal(true),
   reasoning: TierProviderBindingSchema,
   completion: TierProviderBindingSchema,
   value: TierProviderBindingSchema,
 })
+
+const DisabledMixedProviderConfigSchema = z.object({
+  enabled: z.literal(false).default(false),
+  reasoning: TierProviderBindingSchema.optional(),
+  completion: TierProviderBindingSchema.optional(),
+  value: TierProviderBindingSchema.optional(),
+})
+
+export const MixedProviderConfigSchema = z.union([
+  EnabledMixedProviderConfigSchema,
+  DisabledMixedProviderConfigSchema,
+])
 
 export type MixedProviderConfig = z.infer<typeof MixedProviderConfigSchema>
 

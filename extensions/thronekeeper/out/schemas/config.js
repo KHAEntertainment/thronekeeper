@@ -61,12 +61,22 @@ exports.TierProviderBindingSchema = zod_1.z.object({
  * When enabled, each model tier (reasoning/completion/value) can be served by
  * a different API provider with its own base URL, API key, and endpoint kind.
  */
-exports.MixedProviderConfigSchema = zod_1.z.object({
-    enabled: zod_1.z.boolean().default(false),
+const EnabledMixedProviderConfigSchema = zod_1.z.object({
+    enabled: zod_1.z.literal(true),
     reasoning: exports.TierProviderBindingSchema,
     completion: exports.TierProviderBindingSchema,
     value: exports.TierProviderBindingSchema,
 });
+const DisabledMixedProviderConfigSchema = zod_1.z.object({
+    enabled: zod_1.z.literal(false).default(false),
+    reasoning: exports.TierProviderBindingSchema.optional(),
+    completion: exports.TierProviderBindingSchema.optional(),
+    value: exports.TierProviderBindingSchema.optional(),
+});
+exports.MixedProviderConfigSchema = zod_1.z.union([
+    EnabledMixedProviderConfigSchema,
+    DisabledMixedProviderConfigSchema,
+]);
 // ============================================================================
 // VS Code Configuration Schema
 // ============================================================================

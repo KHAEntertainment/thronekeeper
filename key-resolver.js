@@ -33,7 +33,7 @@ const PROVIDER_KEY_SOURCES = {
   [PROVIDERS.glm]: ['GLM_API_KEY', 'ZAI_API_KEY'], // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ['ANTHROPIC_API_KEY'],
   [PROVIDERS.grok]: ['GROK_API_KEY', 'XAI_API_KEY'],
-  [PROVIDERS.kimi]: ['ANTHROPIC_API_KEY'],
+  [PROVIDERS.kimi]: ['KIMI_API_KEY'],
   [PROVIDERS.minimax]: ['MINIMAX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
 }
 

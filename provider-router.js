@@ -237,19 +237,9 @@ export class ProviderRouter {
         const normalizedModel = ctx.model.toLowerCase()
         const existing = this.normalizedTierMap.get(normalizedModel)
         if (existing) {
-          const existingContext = existing.context
-          const sameContext =
-            existingContext.providerId === ctx.providerId &&
-            existingContext.baseUrl === ctx.baseUrl &&
-            existingContext.endpointKind === ctx.endpointKind &&
-            existingContext.model === ctx.model
-
-          if (!sameContext) {
-            throw new Error(
-              `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
-            )
-          }
-          continue
+          throw new Error(
+            `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+          )
         }
 
         const entry = { tier, context: ctx }
@@ -286,26 +276,18 @@ export class ProviderRouter {
   }
 
   /**
-   * Smart key validation: check that every unique provider ID has a key stored.
-   * If two tiers share the same provider, only one key is needed.
+   * Smart key validation: every routed context must carry the key it will use.
    *
    * @returns {{ valid: boolean, missing: string[], uniqueProviders: string[] }}
    */
   validate() {
     const uniqueProviders = new Set()
-    const providerToKey = new Map()
-
-    for (const ctx of Object.values(this.contexts)) {
-      uniqueProviders.add(ctx.providerId)
-      if (ctx.key) {
-        providerToKey.set(ctx.providerId, true)
-      }
-    }
-
     const missing = []
-    for (const pid of uniqueProviders) {
-      if (!providerToKey.has(pid)) {
-        missing.push(pid)
+
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      uniqueProviders.add(ctx.providerId)
+      if (!ctx.key) {
+        missing.push(`${tier}:${ctx.providerId}`)
       }
     }
 
@@ -351,21 +333,17 @@ export function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
       return null
     }
     if (config.errors) {
-      console.error(
+      throw new Error(
         `[ProviderRouter] Invalid MIXED_PROVIDERS_CONFIG: ${config.errors.join('; ')}`
       )
-      return null
     }
 
     const router = new ProviderRouter(config, endpointOverrides)
     const validation = router.validate()
 
     if (!validation.valid) {
-      console.error(
-        `[ProviderRouter] Missing API keys for providers: ${validation.missing.join(', ')}`
-      )
-      console.error(
-        '[ProviderRouter] Mixed provider mode requires stored keys for all unique providers.'
+      throw new Error(
+        `[ProviderRouter] Missing API keys for mixed-provider tiers: ${validation.missing.join(', ')}`
       )
     }
 
@@ -380,10 +358,6 @@ export function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
 
     return router
   } catch (err) {
-    console.warn(
-      '[ProviderRouter] Failed to parse MIXED_PROVIDERS_CONFIG, falling back to single-provider mode:',
-      err.message
-    )
-    return null
+    throw new Error(`[ProviderRouter] Failed to initialize MIXED_PROVIDERS_CONFIG: ${err.message}`)
   }
 }

@@ -1870,8 +1870,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     const payload = typeof modelIdOrPayload === 'object' && modelIdOrPayload !== null ? modelIdOrPayload : null
     const modelId = payload ? String(payload.modelId || payload.model || '') : String(modelIdOrPayload || '')
     const modelType = payload ? payload.modelType : maybeModelType
-    if (payload?.provider) {
-      this.currentProvider = payload.provider
+    if (payload?.provider && payload.provider !== this.currentProvider) {
+      await this.handleUpdateProvider(payload.provider)
     }
     if (!modelId || !modelType) {
       this.log.appendLine(`[handleSetModelFromList] Missing modelId or modelType; skipping save`)
@@ -2040,8 +2040,20 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
    * Persists per-tier provider bindings to VS Code settings.
    */
   private async handleSaveMixedProviders(msg: any) {
+    const postMixedProviderConfigError = (error: string): void => {
+      this.post({
+        type: 'proxyError',
+        payload: {
+          provider: this.runtimeProvider || 'openrouter',
+          error,
+          errorType: 'config',
+        },
+      })
+    }
+
     if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
       this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed payload: expected object`)
+      postMixedProviderConfigError('Mixed provider settings could not be saved because the payload was malformed.')
       return
     }
 
@@ -2057,6 +2069,16 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
     if (enabled && (!hasTier('reasoning') || !hasTier('completion') || !hasTier('value'))) {
       this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed enabled payload: missing tier objects`)
+      postMixedProviderConfigError('Mixed provider settings are incomplete. Reasoning, completion, and value tiers are required when mixed routing is enabled.')
+      return
+    }
+
+    if (!enabled) {
+      const disabledConfig = { enabled: false }
+      this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=false`)
+      await cfg.update('mixedProviders', disabledConfig, target)
+      this.log.appendLine(`[handleSaveMixedProviders] ✅ Mixed provider config disabled`)
+      this.postConfig()
       return
     }
 
@@ -2091,6 +2113,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
       const parsed = MixedProviderConfigSchema.safeParse(mixedConfig)
       if (!parsed.success) {
         this.log.appendLine(`[handleSaveMixedProviders] Rejected invalid mixed config: ${JSON.stringify(parsed.error.format())}`)
+        postMixedProviderConfigError(`Mixed provider settings are invalid: ${parsed.error.issues.map(issue => issue.message).join('; ')}`)
         return
       }
     }

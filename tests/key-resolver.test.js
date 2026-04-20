@@ -23,6 +23,17 @@ describe('key-resolver', () => {
     expect(resolveApiKey('openrouter', env)).toEqual({ key: 'openrouter', source: 'OPENROUTER_API_KEY' })
   })
 
+  it('uses a Kimi-specific API key source', () => {
+    expect(resolveApiKey('kimi', {
+      KIMI_API_KEY: 'kimi',
+      ANTHROPIC_API_KEY: 'anthropic',
+    })).toEqual({ key: 'kimi', source: 'KIMI_API_KEY' })
+
+    expect(resolveApiKey('kimi', {
+      ANTHROPIC_API_KEY: 'anthropic',
+    })).toEqual({ key: null, source: null })
+  })
+
   it('includes OpenRouter headers when provider is openrouter', () => {
     const env = { OPENROUTER_SITE_URL: 'http://localhost', OPENROUTER_APP_TITLE: 'Test App' }
     const headers = providerSpecificHeaders('openrouter', env)

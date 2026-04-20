@@ -405,9 +405,9 @@ export class ProxyManager {
           this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`)
           throw new Error(errorMsg)
         }
-        base.ANTHROPIC_API_KEY = key
+        base.KIMI_API_KEY = key
         setBaseUrl('https://api.kimi.com/coding')
-        this.log.appendLine(`[ProxyManager] Kimi Coding Plan key found: ANTHROPIC_API_KEY set`)
+        this.log.appendLine(`[ProxyManager] Kimi Coding Plan key found: KIMI_API_KEY set`)
         break
       }
       case 'minimax': {

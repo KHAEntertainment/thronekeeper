@@ -33350,7 +33350,7 @@ var PROVIDER_KEY_SOURCES = {
   // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ["ANTHROPIC_API_KEY"],
   [PROVIDERS.grok]: ["GROK_API_KEY", "XAI_API_KEY"],
-  [PROVIDERS.kimi]: ["ANTHROPIC_API_KEY"],
+  [PROVIDERS.kimi]: ["KIMI_API_KEY"],
   [PROVIDERS.minimax]: ["MINIMAX_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 };
 var ANTHROPIC_LIKE_PATTERNS = [
@@ -34077,14 +34077,9 @@ var ProviderRouter = class {
         const normalizedModel = ctx.model.toLowerCase();
         const existing = this.normalizedTierMap.get(normalizedModel);
         if (existing) {
-          const existingContext = existing.context;
-          const sameContext = existingContext.providerId === ctx.providerId && existingContext.baseUrl === ctx.baseUrl && existingContext.endpointKind === ctx.endpointKind && existingContext.model === ctx.model;
-          if (!sameContext) {
-            throw new Error(
-              `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
-            );
-          }
-          continue;
+          throw new Error(
+            `[ProviderRouter] Model "${ctx.model}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+          );
         }
         const entry = { tier, context: ctx };
         this.tierMap.set(ctx.model, entry);
@@ -34114,24 +34109,17 @@ var ProviderRouter = class {
     return this.contexts[tier] || null;
   }
   /**
-   * Smart key validation: check that every unique provider ID has a key stored.
-   * If two tiers share the same provider, only one key is needed.
+   * Smart key validation: every routed context must carry the key it will use.
    *
    * @returns {{ valid: boolean, missing: string[], uniqueProviders: string[] }}
    */
   validate() {
     const uniqueProviders = /* @__PURE__ */ new Set();
-    const providerToKey = /* @__PURE__ */ new Map();
-    for (const ctx of Object.values(this.contexts)) {
-      uniqueProviders.add(ctx.providerId);
-      if (ctx.key) {
-        providerToKey.set(ctx.providerId, true);
-      }
-    }
     const missing = [];
-    for (const pid of uniqueProviders) {
-      if (!providerToKey.has(pid)) {
-        missing.push(pid);
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      uniqueProviders.add(ctx.providerId);
+      if (!ctx.key) {
+        missing.push(`${tier}:${ctx.providerId}`);
       }
     }
     return {
@@ -34165,19 +34153,15 @@ function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
       return null;
     }
     if (config.errors) {
-      console.error(
+      throw new Error(
         `[ProviderRouter] Invalid MIXED_PROVIDERS_CONFIG: ${config.errors.join("; ")}`
       );
-      return null;
     }
     const router2 = new ProviderRouter(config, endpointOverrides);
     const validation = router2.validate();
     if (!validation.valid) {
-      console.error(
-        `[ProviderRouter] Missing API keys for providers: ${validation.missing.join(", ")}`
-      );
-      console.error(
-        "[ProviderRouter] Mixed provider mode requires stored keys for all unique providers."
+      throw new Error(
+        `[ProviderRouter] Missing API keys for mixed-provider tiers: ${validation.missing.join(", ")}`
       );
     }
     if (env.DEBUG || env.debug) {
@@ -34189,11 +34173,7 @@ function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
     }
     return router2;
   } catch (err) {
-    console.warn(
-      "[ProviderRouter] Failed to parse MIXED_PROVIDERS_CONFIG, falling back to single-provider mode:",
-      err.message
-    );
-    return null;
+    throw new Error(`[ProviderRouter] Failed to initialize MIXED_PROVIDERS_CONFIG: ${err.message}`);
   }
 }
 
@@ -34524,7 +34504,7 @@ var models = {
 };
 var ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || "2023-06-01";
 var ANTHROPIC_BETA = process.env.ANTHROPIC_BETA;
-var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY";
+var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, GROK_API_KEY, XAI_API_KEY";
 var router = createRouterFromEnv(process.env, endpointKindOverrides);
 var transformerRegistry = new TransformerRegistry();
 transformerRegistry.register("tooluse", tooluse_default);
@@ -34840,7 +34820,9 @@ fastify.get("/v1/models", async (request, reply) => {
   }
 });
 async function healthCheckHandler(request, reply) {
-  const isReady = !!key;
+  const routerValidation = router ? router.validate() : null;
+  const routerReady = Boolean(routerValidation?.valid);
+  const isReady = Boolean(key || routerReady);
   const status = isReady ? "ok" : "unhealthy";
   if (!isReady) {
     reply.code(503);
@@ -34872,11 +34854,13 @@ async function healthCheckHandler(request, reply) {
     },
     timestamp: Date.now(),
     uptime: process.uptime(),
-    mixedProviders: router ? router.toDebugObject() : null
+    mixedProviders: router ? router.toDebugObject() : null,
+    readinessSource: key ? "single-provider-key" : routerReady ? "mixed-provider-router" : "missing-key"
   };
   if (!isReady) {
     healthResponse.missingKey = true;
     healthResponse.keySourcesTried = KEY_ENV_HINT;
+    if (routerValidation && !routerValidation.valid) healthResponse.missingMixedProviderKeys = routerValidation.missing;
     healthResponse.endpointKind = endpointKind;
     if (baseUrl) healthResponse.baseUrl = baseUrl;
     if (process.env.FORCE_PROVIDER) healthResponse.forcedProvider = process.env.FORCE_PROVIDER;
@@ -35100,7 +35084,8 @@ fastify.post("/v1/messages", async (request, reply) => {
     const isAnthropicNative = normalizedEffectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE || normalizedEffectiveEndpointKind === "anthropic" || normalizedEffectiveEndpointKind === "anthropic-native";
     if (!effectiveKey) {
       reply.code(400);
-      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === "deepseek" ? "Deepseek" : effectiveProvider === "glm" ? "GLM" : effectiveProvider} API Key) or set the correct env var (${effectiveProvider === "deepseek" ? "DEEPSEEK_API_KEY" : effectiveProvider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : "API_KEY"}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === "openrouter" ? "OpenRouter" : effectiveProvider} API key in the extension settings.`;
+      const providerEnvHint = effectiveProvider === "deepseek" ? "DEEPSEEK_API_KEY" : effectiveProvider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : effectiveProvider === "kimi" ? "KIMI_API_KEY" : effectiveProvider === "minimax" ? "MINIMAX_API_KEY" : "API_KEY";
+      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === "deepseek" ? "Deepseek" : effectiveProvider === "glm" ? "GLM" : effectiveProvider} API Key) or set the correct env var (${providerEnvHint}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === "openrouter" ? "OpenRouter" : effectiveProvider} API key in the extension settings.`;
       return {
         error: {
           message: `No API key found for provider "${effectiveProvider}". Checked ${KEY_ENV_HINT}.`,
@@ -35122,7 +35107,10 @@ fastify.post("/v1/messages", async (request, reply) => {
     }
     console.log(`[Request] Starting request to ${requestUrl}`);
     if (isAnthropicNative) {
-      const anthropicPayload = buildAnthropicPayload(payload);
+      const anthropicPayload = buildAnthropicPayload({
+        ...payload,
+        model: routedContext?.model || payload.model
+      });
       const upstreamResponse = await fetch(requestUrl, {
         method: "POST",
         headers,
@@ -35604,6 +35592,10 @@ ${toolInstructions}`;
     let fullContent = "";
     let usage = null;
     let textBlockStarted = false;
+    let thinkingBlockStarted = false;
+    let textBlockIndex = 0;
+    let thinkingBlockIndex = 0;
+    let nextContentBlockIndex = 0;
     let encounteredToolCall = false;
     const toolCallAccumulators = {};
     let chunkBuffer = "";
@@ -35649,7 +35641,7 @@ ${toolInstructions}`;
                     if (textBlockStarted) {
                       await sendContentSSE("content_block_delta", {
                         type: "content_block_delta",
-                        index: 0,
+                        index: textBlockIndex,
                         delta: {
                           type: "text_delta",
                           text: finalParsed.choices[0].delta.content
@@ -35671,9 +35663,10 @@ ${toolInstructions}`;
                 const fallbackText = trimmedReasoning ? "Model returned only reasoning without a final answer. Consider selecting a different OpenRouter model or disabling tool usage." : "Model response was empty.";
                 if (!textBlockStarted) {
                   textBlockStarted = true;
+                  textBlockIndex = nextContentBlockIndex++;
                   await sendContentSSE("content_block_start", {
                     type: "content_block_start",
-                    index: 0,
+                    index: textBlockIndex,
                     content_block: {
                       type: "text",
                       text: ""
@@ -35682,7 +35675,7 @@ ${toolInstructions}`;
                 }
                 await sendContentSSE("content_block_delta", {
                   type: "content_block_delta",
-                  index: 0,
+                  index: textBlockIndex,
                   delta: {
                     type: "text_delta",
                     text: fallbackText
@@ -35697,6 +35690,18 @@ ${toolInstructions}`;
                 totalResponseTime: totalStreamMs,
                 serverProcessingMs: ttfbMs ? ttfbMs - elapsedMs : null
               });
+              if (thinkingBlockStarted) {
+                sendSSE(reply, "content_block_stop", {
+                  type: "content_block_stop",
+                  index: thinkingBlockIndex
+                });
+              }
+              if (textBlockStarted) {
+                sendSSE(reply, "content_block_stop", {
+                  type: "content_block_stop",
+                  index: textBlockIndex
+                });
+              }
               if (encounteredToolCall) {
                 for (const idx in toolCallAccumulators) {
                   sendSSE(reply, "content_block_stop", {
@@ -35704,11 +35709,6 @@ ${toolInstructions}`;
                     index: parseInt(idx, 10)
                   });
                 }
-              } else if (textBlockStarted) {
-                sendSSE(reply, "content_block_stop", {
-                  type: "content_block_stop",
-                  index: 0
-                });
               }
               sendSSE(reply, "message_delta", {
                 type: "message_delta",
@@ -35786,9 +35786,10 @@ ${toolInstructions}`;
               fullContent += delta.content;
               if (!textBlockStarted) {
                 textBlockStarted = true;
+                textBlockIndex = nextContentBlockIndex++;
                 await sendContentSSE("content_block_start", {
                   type: "content_block_start",
-                  index: 0,
+                  index: textBlockIndex,
                   content_block: {
                     type: "text",
                     text: ""
@@ -35797,21 +35798,22 @@ ${toolInstructions}`;
               }
               await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
-                index: 0,
+                index: textBlockIndex,
                 delta: {
                   type: "text_delta",
                   text: delta.content
                 }
               });
             } else if (delta && (delta.reasoning || delta.reasoning_content)) {
-              if (!textBlockStarted) {
-                textBlockStarted = true;
+              if (!thinkingBlockStarted) {
+                thinkingBlockStarted = true;
+                thinkingBlockIndex = nextContentBlockIndex++;
                 await sendContentSSE("content_block_start", {
                   type: "content_block_start",
-                  index: 0,
+                  index: thinkingBlockIndex,
                   content_block: {
-                    type: "text",
-                    text: ""
+                    type: "thinking",
+                    thinking: ""
                   }
                 });
               }
@@ -35819,9 +35821,10 @@ ${toolInstructions}`;
               accumulatedReasoning += reasoningText;
               await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
-                index: 0,
+                index: thinkingBlockIndex,
                 delta: {
-                  reasoning: reasoningText
+                  type: "thinking_delta",
+                  thinking: reasoningText
                 }
               });
             }

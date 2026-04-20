@@ -148,6 +148,7 @@ describe('mixed provider tab activation contract', () => {
   it('disabling three-model mode hides mixed tabs without clearing model selections', () => {
     const harness = createMixedProviderHarness()
     const originalModelsByProvider = JSON.stringify(harness.state.modelsByProvider)
+    const originalTierAssignments = JSON.stringify(harness.state.mixedTierAssignments)
 
     harness.state.twoModelMode = true
     harness.addProviderTab()
@@ -158,5 +159,6 @@ describe('mixed provider tab activation contract', () => {
     expect(harness.ui.tabBarDisplay).toBe('none')
     expect(harness.ui.addDisplay).toBe('none')
     expect(JSON.stringify(harness.state.modelsByProvider)).toBe(originalModelsByProvider)
+    expect(JSON.stringify(harness.state.mixedTierAssignments)).toBe(originalTierAssignments)
   })
 })

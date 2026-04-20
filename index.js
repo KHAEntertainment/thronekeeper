@@ -102,7 +102,7 @@ const models = {
 
 const ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || '2023-06-01'
 const ANTHROPIC_BETA = process.env.ANTHROPIC_BETA
-const KEY_ENV_HINT = 'CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY'
+const KEY_ENV_HINT = 'CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, GROK_API_KEY, XAI_API_KEY'
 
 // Mixed-provider router (KHA-267): initialized from MIXED_PROVIDERS_CONFIG env var
 // When active, routes each request to the correct upstream provider based on model name → tier mapping
@@ -531,7 +531,9 @@ fastify.get('/v1/models', async (request, reply) => {
  *  - forcedProvider: value of FORCE_PROVIDER (if set)
  */
 async function healthCheckHandler(request, reply) {
-  const isReady = !!key // Proxy is ready when API key is available
+  const routerValidation = router ? router.validate() : null
+  const routerReady = Boolean(routerValidation?.valid)
+  const isReady = Boolean(key || routerReady) // Single-provider key or complete mixed-provider router
   const status = isReady ? 'ok' : 'unhealthy'
   
   if (!isReady) {
@@ -568,11 +570,13 @@ async function healthCheckHandler(request, reply) {
     timestamp: Date.now(),
     uptime: process.uptime(),
     mixedProviders: router ? router.toDebugObject() : null,
+    readinessSource: key ? 'single-provider-key' : (routerReady ? 'mixed-provider-router' : 'missing-key'),
   }
   
   if (!isReady) {
     healthResponse.missingKey = true
     healthResponse.keySourcesTried = KEY_ENV_HINT
+    if (routerValidation && !routerValidation.valid) healthResponse.missingMixedProviderKeys = routerValidation.missing
     healthResponse.endpointKind = endpointKind
     if (baseUrl) healthResponse.baseUrl = baseUrl
     if (process.env.FORCE_PROVIDER) healthResponse.forcedProvider = process.env.FORCE_PROVIDER
@@ -829,8 +833,14 @@ fastify.post('/v1/messages', async (request, reply) => {
 
     if (!effectiveKey) {
       reply.code(400)
+      const providerEnvHint =
+        effectiveProvider === 'deepseek' ? 'DEEPSEEK_API_KEY'
+          : effectiveProvider === 'glm' ? 'ZAI_API_KEY or GLM_API_KEY'
+            : effectiveProvider === 'kimi' ? 'KIMI_API_KEY'
+              : effectiveProvider === 'minimax' ? 'MINIMAX_API_KEY'
+                : 'API_KEY'
       const hint = isAnthropicNative
-        ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === 'deepseek' ? 'Deepseek' : effectiveProvider === 'glm' ? 'GLM' : effectiveProvider} API Key) or set the correct env var (${effectiveProvider === 'deepseek' ? 'DEEPSEEK_API_KEY' : effectiveProvider === 'glm' ? 'ZAI_API_KEY or GLM_API_KEY' : 'API_KEY'}), and confirm the provider switch in settings.`
+        ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === 'deepseek' ? 'Deepseek' : effectiveProvider === 'glm' ? 'GLM' : effectiveProvider} API Key) or set the correct env var (${providerEnvHint}), and confirm the provider switch in settings.`
         : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === 'openrouter' ? 'OpenRouter' : effectiveProvider} API key in the extension settings.`
       return {
         error: {
@@ -859,7 +869,10 @@ fastify.post('/v1/messages', async (request, reply) => {
     console.log(`[Request] Starting request to ${requestUrl}`)
 
     if (isAnthropicNative) {
-      const anthropicPayload = buildAnthropicPayload(payload)
+      const anthropicPayload = buildAnthropicPayload({
+        ...payload,
+        model: routedContext?.model || payload.model,
+      })
 
       const upstreamResponse = await fetch(requestUrl, {
         method: 'POST',
@@ -1521,6 +1534,10 @@ fastify.post('/v1/messages', async (request, reply) => {
     let fullContent = ''  // Accumulate full content for XML parsing at end
     let usage = null
     let textBlockStarted = false
+    let thinkingBlockStarted = false
+    let textBlockIndex = 0
+    let thinkingBlockIndex = 0
+    let nextContentBlockIndex = 0
     let encounteredToolCall = false
     const toolCallAccumulators = {}  // key: tool call index, value: accumulated arguments string
     let chunkBuffer = ''  // Buffer for incomplete JSON chunks
@@ -1577,7 +1594,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                     if (textBlockStarted) {
                       await sendContentSSE('content_block_delta', {
                         type: 'content_block_delta',
-                        index: 0,
+                        index: textBlockIndex,
                         delta: {
                           type: 'text_delta',
                           text: finalParsed.choices[0].delta.content
@@ -1602,9 +1619,10 @@ fastify.post('/v1/messages', async (request, reply) => {
                   : 'Model response was empty.'
                 if (!textBlockStarted) {
                   textBlockStarted = true
+                  textBlockIndex = nextContentBlockIndex++
                   await sendContentSSE('content_block_start', {
                     type: 'content_block_start',
-                    index: 0,
+                    index: textBlockIndex,
                     content_block: {
                       type: 'text',
                       text: ''
@@ -1613,7 +1631,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                 }
                 await sendContentSSE('content_block_delta', {
                   type: 'content_block_delta',
-                  index: 0,
+                  index: textBlockIndex,
                   delta: {
                     type: 'text_delta',
                     text: fallbackText
@@ -1630,6 +1648,18 @@ fastify.post('/v1/messages', async (request, reply) => {
               serverProcessingMs: ttfbMs ? ttfbMs - elapsedMs : null
             })
             // Finalize the stream with stop events.
+            if (thinkingBlockStarted) {
+              sendSSE(reply, 'content_block_stop', {
+                type: 'content_block_stop',
+                index: thinkingBlockIndex
+              })
+            }
+            if (textBlockStarted) {
+              sendSSE(reply, 'content_block_stop', {
+                type: 'content_block_stop',
+                index: textBlockIndex
+              })
+            }
             if (encounteredToolCall) {
               for (const idx in toolCallAccumulators) {
                 sendSSE(reply, 'content_block_stop', {
@@ -1637,11 +1667,6 @@ fastify.post('/v1/messages', async (request, reply) => {
                   index: parseInt(idx, 10)
                 })
               }
-            } else if (textBlockStarted) {
-              sendSSE(reply, 'content_block_stop', {
-                type: 'content_block_stop',
-                index: 0
-              })
             }
             sendSSE(reply, 'message_delta', {
               type: 'message_delta',
@@ -1729,9 +1754,10 @@ fastify.post('/v1/messages', async (request, reply) => {
             
             if (!textBlockStarted) {
               textBlockStarted = true
+              textBlockIndex = nextContentBlockIndex++
               await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
-                index: 0,
+                index: textBlockIndex,
                 content_block: {
                   type: 'text',
                   text: ''
@@ -1740,21 +1766,22 @@ fastify.post('/v1/messages', async (request, reply) => {
             }
             await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
-              index: 0,
+              index: textBlockIndex,
               delta: {
                 type: 'text_delta',
                 text: delta.content
               }
             })
           } else if (delta && (delta.reasoning || delta.reasoning_content)) {
-            if (!textBlockStarted) {
-              textBlockStarted = true
+            if (!thinkingBlockStarted) {
+              thinkingBlockStarted = true
+              thinkingBlockIndex = nextContentBlockIndex++
               await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
-                index: 0,
+                index: thinkingBlockIndex,
                 content_block: {
-                  type: 'text',
-                  text: ''
+                  type: 'thinking',
+                  thinking: ''
                 }
               })
             }
@@ -1762,9 +1789,10 @@ fastify.post('/v1/messages', async (request, reply) => {
             accumulatedReasoning += reasoningText
             await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
-              index: 0,
+              index: thinkingBlockIndex,
               delta: {
-                reasoning: reasoningText
+                type: 'thinking_delta',
+                thinking: reasoningText
               }
             })
           }
