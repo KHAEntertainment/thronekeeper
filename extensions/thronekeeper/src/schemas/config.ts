@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { ProviderMapSchema } from './messages'
 
 /**
  * Configuration Schema Definitions
@@ -7,8 +6,8 @@ import { ProviderMapSchema } from './messages'
  * These schemas enforce contracts for VS Code configuration settings
  * and ensure consistency between workspace/global scopes.
  * 
- * Schema Version: 1.0.0
- * Last Updated: 2025-10-28
+ * Schema Version: 1.1.0
+ * Last Updated: 2026-04-12
  */
 
 // ============================================================================
@@ -37,11 +36,79 @@ export const ConfigurationTargetSchema = z.enum(['workspace', 'global'])
 export type ConfigurationTarget = z.infer<typeof ConfigurationTargetSchema>
 
 /**
+ * Provider map structure (canonical storage format)
+ * 
+ * Note: 'coding' is a deprecated alias for 'completion' - use 'completion' for all writes
+ */
+export const ProviderMapSchema = z.object({
+  reasoning: z.string(),
+  completion: z.string(),  // Canonical storage key
+  /** @deprecated Use 'completion' instead */
+  coding: z.string().optional(),  // Read-only fallback for backward compatibility
+  value: z.string()
+})
+
+export type ProviderMap = z.infer<typeof ProviderMapSchema>
+
+/**
  * Custom endpoint kind
  */
 export const CustomEndpointKindSchema = z.enum(['auto', 'openai', 'anthropic'])
 
 export type CustomEndpointKind = z.infer<typeof CustomEndpointKindSchema>
+
+const TierEndpointKindSchema = z
+  .enum(['auto', 'openai', 'anthropic', 'openai-compatible', 'anthropic-native'])
+  .transform(kind => {
+    if (kind === 'openai-compatible') return 'openai'
+    if (kind === 'anthropic-native') return 'anthropic'
+    return kind
+  })
+
+// ============================================================================
+// KHA-267: Mixed Provider Types
+// ============================================================================
+
+/**
+ * Per-tier provider binding — maps a single tier to a specific provider + model.
+ * Used in mixed-provider mode to allow each model tier (Opus/Sonnet/Haiku) to
+ * route to a different upstream API provider.
+ */
+export const TierProviderBindingSchema = z.object({
+  providerId: z.string().trim().min(1),      // e.g., 'glm', 'minimax', 'kimi', 'custom'
+  baseUrl: z.string().trim().min(1),         // Upstream base URL for this provider
+  model: z.string().trim().min(1),           // Model ID at the upstream provider (without namespace)
+  displayModel: z.string().trim().min(1).optional(),  // Namespaced display name (e.g., 'glm/glm-5.1')
+  endpointKind: TierEndpointKindSchema.optional(),
+})
+
+export type TierProviderBinding = z.infer<typeof TierProviderBindingSchema>
+
+/**
+ * Mixed-provider configuration — enables per-tier provider routing.
+ * When enabled, each model tier (reasoning/completion/value) can be served by
+ * a different API provider with its own base URL, API key, and endpoint kind.
+ */
+const EnabledMixedProviderConfigSchema = z.object({
+  enabled: z.literal(true),
+  reasoning: TierProviderBindingSchema,
+  completion: TierProviderBindingSchema,
+  value: TierProviderBindingSchema,
+})
+
+const DisabledMixedProviderConfigSchema = z.object({
+  enabled: z.literal(false).default(false),
+  reasoning: TierProviderBindingSchema.optional(),
+  completion: TierProviderBindingSchema.optional(),
+  value: TierProviderBindingSchema.optional(),
+})
+
+export const MixedProviderConfigSchema = z.union([
+  EnabledMixedProviderConfigSchema,
+  DisabledMixedProviderConfigSchema,
+])
+
+export type MixedProviderConfig = z.infer<typeof MixedProviderConfigSchema>
 
 // ============================================================================
 // VS Code Configuration Schema
@@ -106,8 +173,12 @@ export const ClaudeThroneConfigSchema = z.object({
     enableKeyNormalization: z.boolean().default(true),
     enablePreApplyHydration: z.boolean().default(true),
     enableAnthropicDirectApply: z.boolean().default(false), // Comment 10: Gate deprecated feature
-    enableAgentTeams: z.boolean().default(false) // KHA-269: Agent Teams feature flag
-  }).optional()
+    enableAgentTeams: z.boolean().default(false), // KHA-269: Agent Teams feature flag
+    enableMixedProviders: z.boolean().default(false), // KHA-267: Mixed provider mode
+  }).optional(),
+  
+  // KHA-267: Mixed provider configuration (null = single-provider mode)
+  mixedProviders: MixedProviderConfigSchema.optional().nullable(),
 })
 
 export type ClaudeThroneConfig = z.infer<typeof ClaudeThroneConfigSchema>
@@ -255,23 +326,58 @@ export function checkConfigurationInvariants(
     }
   }
   
-  // Check 2: Verify active provider has configuration
-  const activeProvider = config.provider || 'openrouter'
-  const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider]
-  
-  if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
-    violations.push(
-      `Active provider '${activeProvider}' has no model selections. ` +
-      `This may cause proxy start failures.`
-    )
+  const mixedProvidersEnabled = Boolean(config.mixedProviders?.enabled)
+
+  if (!mixedProvidersEnabled) {
+    // Check 2: Verify active provider has configuration
+    const activeProvider = config.provider || 'openrouter'
+    const activeProviderMap = config.modelSelectionsByProvider?.[activeProvider]
+    
+    if (!activeProviderMap || (!activeProviderMap.reasoning && !config.reasoningModel)) {
+      violations.push(
+        `Active provider '${activeProvider}' has no model selections. ` +
+        `This may cause proxy start failures.`
+      )
+    }
+    
+    // Check 3: Verify two-model mode has all required models
+    if (config.twoModelMode) {
+      const normalized = normalizeProviderMap(activeProviderMap)
+      if (!normalized.completion || !normalized.value) {
+        violations.push(
+          `Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`
+        )
+      }
+    }
   }
   
-  // Check 3: Verify two-model mode has all required models
-  if (config.twoModelMode) {
-    const normalized = normalizeProviderMap(activeProviderMap)
-    if (!normalized.completion || !normalized.value) {
+  // Check 4 (KHA-267): Verify mixed-provider config consistency
+  if (config.mixedProviders?.enabled) {
+    const mp = config.mixedProviders
+    const tiers = ['reasoning', 'completion', 'value'] as const
+    for (const tier of tiers) {
+      const binding = mp[tier]
+      if (!binding?.providerId) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no providerId.`
+        )
+      }
+      if (!binding?.model) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no model.`
+        )
+      }
+      if (!binding?.baseUrl) {
+        violations.push(
+          `Mixed provider mode enabled but '${tier}' tier has no baseUrl.`
+        )
+      }
+    }
+    
+    // Verify mixed mode requires twoModelMode to be enabled
+    if (!config.twoModelMode) {
       violations.push(
-        `Two-model mode enabled but provider '${activeProvider}' is missing completion or value models.`
+        `Mixed provider mode requires '3 Different Models' mode to be enabled.`
       )
     }
   }

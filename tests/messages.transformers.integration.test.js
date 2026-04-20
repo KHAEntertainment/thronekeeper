@@ -3,26 +3,21 @@
  * Tests transformers working with the full request/response pipeline
  */
 
-import { describe, it, expect, afterAll, beforeAll } from 'vitest'
-import { spawnProxyProcess, stopProxyProcess, findAvailablePort, startUpstreamMock } from './utils.js'
+import { describe, it, expect, afterEach } from 'vitest'
+import { spawnProxyProcess, stopChild, findAvailablePort, startUpstreamMock } from './utils.js'
 
 describe('Transformer integration tests', () => {
-  let upstreamPort
   let upstreamServer
-  let proxyPort
   let proxyProcess
 
-  beforeAll(async () => {
-    upstreamPort = await findAvailablePort()
-    proxyPort = await findAvailablePort()
-  })
-
-  afterAll(async () => {
-    if (upstreamServer) {
-      upstreamServer.close()
-    }
+  afterEach(async () => {
     if (proxyProcess) {
-      await stopProxyProcess(proxyProcess)
+      await stopChild(proxyProcess)
+      proxyProcess = null
+    }
+    if (upstreamServer) {
+      await new Promise(resolve => upstreamServer.close(resolve))
+      upstreamServer = null
     }
   })
 
@@ -51,30 +46,24 @@ describe('Transformer integration tests', () => {
       usage: { prompt_tokens: 10, completion_tokens: 5 }
     }
 
-    const { received, close } = startUpstreamMock({
+    const upstream = await startUpstreamMock({
       mode: 'json',
       jsonResponse: mockResponse
     })
 
-    upstreamServer = close
-
-    await new Promise((resolve) => {
-      close.listen(upstreamPort, '127.0.0.1', resolve)
-    })
+    upstreamServer = upstream.server
+    const proxyPort = await findAvailablePort()
 
     // Start proxy with OpenRouter provider and a model that uses tooluse transformer
-    proxyProcess = spawnProxyProcess({
+    proxyProcess = await spawnProxyProcess({
       port: proxyPort,
+      baseUrl: `http://127.0.0.1:${upstream.port}`,
       env: {
-        ANTHROPIC_PROXY_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         CUSTOM_API_KEY: 'test-key',
         REASONING_MODEL: 'inclusionai/ring-1t',
         COMPLETION_MODEL: 'inclusionai/ring-1t'
       }
     })
-
-    // Wait for proxy to start
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Send request with tools
     const response = await fetch(`http://127.0.0.1:${proxyPort}/v1/messages`, {
@@ -112,7 +101,7 @@ describe('Transformer integration tests', () => {
     const data = await response.json()
 
     // Verify the request sent to upstream had tool_choice set by tooluse transformer
-    const sentBody = JSON.parse(received.body)
+    const sentBody = JSON.parse(upstream.received.body)
     expect(sentBody.tool_choice).toEqual({ type: 'auto' })
 
     // Verify response contains tool use
@@ -130,30 +119,24 @@ describe('Transformer integration tests', () => {
       { choices: [{ delta: {}, index: 0, finish_reason: 'stop' }] }
     ]
 
-    const { received, close } = startUpstreamMock({
+    const upstream = await startUpstreamMock({
       mode: 'sse',
       sseChunks
     })
 
-    upstreamServer = close
-
-    await new Promise((resolve) => {
-      close.listen(upstreamPort, '127.0.0.1', resolve)
-    })
+    upstreamServer = upstream.server
+    const proxyPort = await findAvailablePort()
 
     // Start proxy with a reasoning model
-    proxyProcess = spawnProxyProcess({
+    proxyProcess = await spawnProxyProcess({
       port: proxyPort,
+      baseUrl: `http://127.0.0.1:${upstream.port}`,
       env: {
-        ANTHROPIC_PROXY_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         CUSTOM_API_KEY: 'test-key',
         REASONING_MODEL: 'deepseek-reasoner',
         COMPLETION_MODEL: 'deepseek-reasoner'
       }
     })
-
-    // Wait for proxy to start
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Send streaming request
     const response = await fetch(`http://127.0.0.1:${proxyPort}/v1/messages`, {
@@ -217,30 +200,24 @@ describe('Transformer integration tests', () => {
       usage: { prompt_tokens: 10, completion_tokens: 5 }
     }
 
-    const { received, close } = startUpstreamMock({
+    const upstream = await startUpstreamMock({
       mode: 'json',
       jsonResponse: mockResponse
     })
 
-    upstreamServer = close
-
-    await new Promise((resolve) => {
-      close.listen(upstreamPort, '127.0.0.1', resolve)
-    })
+    upstreamServer = upstream.server
+    const proxyPort = await findAvailablePort()
 
     // Start proxy with Deepseek provider and reasoner model (configured with maxtoken in capabilities)
-    proxyProcess = spawnProxyProcess({
+    proxyProcess = await spawnProxyProcess({
       port: proxyPort,
+      baseUrl: `http://127.0.0.1:${upstream.port}`,
       env: {
-        ANTHROPIC_PROXY_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         CUSTOM_API_KEY: 'test-key',
         REASONING_MODEL: 'deepseek-reasoner',
         COMPLETION_MODEL: 'deepseek-reasoner'
       }
     })
-
-    // Wait for proxy to start
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Send request without max_tokens - should be set by transformer
     const response = await fetch(`http://127.0.0.1:${proxyPort}/v1/messages`, {
@@ -265,7 +242,7 @@ describe('Transformer integration tests', () => {
     expect(response.ok).toBe(true)
 
     // Verify the request sent to upstream had max_tokens set by maxtoken transformer
-    const sentBody = JSON.parse(received.body)
+    const sentBody = JSON.parse(upstream.received.body)
     expect(sentBody.max_tokens).toBe(65536) // From models-capabilities.json config
   })
 
@@ -295,30 +272,24 @@ describe('Transformer integration tests', () => {
       usage: { prompt_tokens: 10, completion_tokens: 5 }
     }
 
-    const { received, close } = startUpstreamMock({
+    const upstream = await startUpstreamMock({
       mode: 'json',
       jsonResponse: mockResponse
     })
 
-    upstreamServer = close
-
-    await new Promise((resolve) => {
-      close.listen(upstreamPort, '127.0.0.1', resolve)
-    })
+    upstreamServer = upstream.server
+    const proxyPort = await findAvailablePort()
 
     // Start proxy with a model that uses enhancetool transformer
-    proxyProcess = spawnProxyProcess({
+    proxyProcess = await spawnProxyProcess({
       port: proxyPort,
+      baseUrl: `http://127.0.0.1:${upstream.port}`,
       env: {
-        ANTHROPIC_PROXY_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         CUSTOM_API_KEY: 'test-key',
         REASONING_MODEL: 'inclusionai/ring-1t',
         COMPLETION_MODEL: 'inclusionai/ring-1t'
       }
     })
-
-    // Wait for proxy to start
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Send request
     const response = await fetch(`http://127.0.0.1:${proxyPort}/v1/messages`, {

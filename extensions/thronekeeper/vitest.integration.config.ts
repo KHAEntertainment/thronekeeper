@@ -24,7 +24,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
+      '@': path.resolve(__dirname, './src'),
+      vscode: path.resolve(__dirname, './tests/vscode-shim.ts')
     }
   }
 })

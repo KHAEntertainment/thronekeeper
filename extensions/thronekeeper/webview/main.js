@@ -28,6 +28,8 @@
       together: { reasoning: '', completion: '', value: '' },
       deepseek: { reasoning: '', completion: '', value: '' },
       glm: { reasoning: '', completion: '', value: '' },
+      kimi: { reasoning: '', completion: '', value: '' },
+      minimax: { reasoning: '', completion: '', value: '' },
       custom: { reasoning: '', completion: '', value: '' }
     },
     proxyRunning: false,
@@ -47,8 +49,11 @@
     enableTokenValidation: true,
     enableKeyNormalization: true,
     enablePreApplyHydration: true,
-    enableAgentTeams: false // KHA-269: Agent Teams feature flag
+    enableAgentTeams: false, // KHA-269: Agent Teams feature flag
+    enableMixedProviders: false // KHA-267: Mixed provider mode
   },
+  // KHA-267: Mixed provider configuration
+  mixedProviders: null,
   // Comment 2: Error telemetry buffer
   errorBuffer: [], // In-memory buffer of recent errors
   maxErrorBufferSize: 10, // Keep last 10 errors
@@ -384,51 +389,79 @@
             name: 'OpenRouter',
             description: 'Access 400+ models with smart routing',
       helpUrl: 'https://openrouter.ai/keys',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://openrouter.ai/api',
+      endpointKind: 'openai'
         },
         openai: {
             name: 'OpenAI',
             description: 'GPT-4, GPT-4o, and o1 models',
       helpUrl: 'https://platform.openai.com/api-keys',
-      apiPrefix: 'openai/'
+      apiPrefix: 'openai/',
+      baseUrl: 'https://api.openai.com',
+      endpointKind: 'openai'
         },
         together: {
             name: 'Together AI',
             description: 'Open source models with fast inference',
       helpUrl: 'https://api.together.xyz/settings/api-keys',
-      apiPrefix: 'together/'
+      apiPrefix: 'together/',
+      baseUrl: 'https://api.together.xyz',
+      endpointKind: 'openai'
         },
         deepseek: {
       name: 'Deepseek',
             description: 'Anthropic-compatible API with DeepSeek models',
       helpUrl: 'https://platform.deepseek.com/api_keys',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      endpointKind: 'anthropic'
         },
         glm: {
       name: 'GLM Coding Plan (z.ai)',
             description: 'Anthropic-compatible API with GLM models',
       helpUrl: 'https://open.bigmodel.cn/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.z.ai/api/anthropic',
+      endpointKind: 'anthropic'
         },
         minimax: {
             name: 'Minimax Coding Plan',
             description: 'MiniMax AI with chat and completion models',
       helpUrl: 'https://www.minimax.io/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.minimax.io/anthropic',
+      endpointKind: 'anthropic'
         },
         kimi: {
             name: 'Kimi Coding Plan (Moonshot AI)',
             description: 'Kimi AI for coding and reasoning',
       helpUrl: 'https://kimi.com/',
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: 'https://api.kimi.com/coding',
+      endpointKind: 'anthropic'
         },
         custom: {
             name: 'Custom Provider',
             description: 'Use any OpenAI-compatible endpoint',
       helpUrl: null,
-      apiPrefix: ''
+      apiPrefix: '',
+      baseUrl: '',
+      endpointKind: 'auto'
     }
   };
+
+  function normalizeBaseUrlForOverride(baseUrl) {
+    return String(baseUrl || '').trim().replace(/\/+$/, '');
+  }
+
+  function endpointKindForBase(baseUrl, fallback = 'auto') {
+    const normalized = normalizeBaseUrlForOverride(baseUrl);
+    if (normalized && state.endpointOverrides?.[normalized]) {
+      return state.endpointOverrides[normalized];
+    }
+    return fallback || 'auto';
+  }
 
   /**
    * Handle changes to a custom provider's endpoint kind and persist an override when a base URL is present.
@@ -471,6 +504,7 @@
   function init() {
     console.log('[init] Initializing Claude Throne webview...');
         setupEventListeners();
+    initMixedTabListeners();
     restoreState();
     
     // Notify backend that webview is ready
@@ -893,6 +927,11 @@
             type: 'updateProvider',
       provider: state.provider 
     });
+
+    // KHA-267: Update mixed-provider tab when switching providers on a secondary tab
+    if (typeof onProviderChangeForMixedTab === 'function') {
+      onProviderChangeForMixedTab();
+    }
   }
 
   /**
@@ -1754,9 +1793,15 @@
    * @param {Object} keys - Mapping of provider IDs to stored key presence (truthy value indicates a stored key). May include a top-level `anthropic` entry.
    */
   function handleKeysLoaded(keys) {
+    state.keyStatus = keys || {};
     console.log('[handleKeysLoaded] Keys status received:', keys);
     console.log('[handleKeysLoaded] Current provider in state:', state.provider);
     console.log('[handleKeysLoaded] Key status for current provider:', keys[state.provider]);
+    
+    // Also update mixed provider UI badges
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
+    }
     
     // Update UI to show if key is stored
     const input = document.getElementById('apiKeyInput');
@@ -1822,6 +1867,9 @@
     const newValue = e.target.checked;
     console.log('[onTwoModelToggle] Toggling three-model mode from', state.twoModelMode, 'to', newValue);
     state.twoModelMode = newValue;
+    if (!newValue && typeof deactivateMixedProviderTabs === 'function') {
+      deactivateMixedProviderTabs();
+    }
     updateTwoModelUI();
     saveState();
     
@@ -1852,6 +1900,11 @@
     
     // Update OpusPlan UI when three-model mode changes
     updateOpusPlanUI();
+    
+    // Phase 3b: Ensure UI blocks toggle appropriately
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
+    }
   }
 
   function updateSaveComboButton() {
@@ -1929,13 +1982,16 @@
     if (type === 'reasoning') {
       state.reasoningModel = modelId;
       normalized.reasoning = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.reasoning = state.provider;
     } else if (type === 'coding') {
       state.codingModel = modelId;
       // Comment 3: Map 'coding' to 'completion' canonical key
       normalized.completion = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.completion = state.provider;
     } else if (type === 'value') {
       state.valueModel = modelId;
       normalized.value = modelId;
+      if (state.mixedTierAssignments) state.mixedTierAssignments.value = state.provider;
     }
     
     // Comment 3: Save normalized map back (ensures canonical keys only)
@@ -1964,6 +2020,11 @@
     updateSaveComboButton();
     updateSelectedModelsDisplay();
     saveState();
+    
+    if (state.featureFlags.enableMixedProviders) {
+      saveMixedState();
+    }
+    
     // Immediately re-render model list to update highlighting - state is already updated synchronously above
     renderModelList();
     // handleModelsSaved will also call renderModelList() as a safety net after backend confirmation
@@ -2884,6 +2945,55 @@
       agentTeamsCheckbox.checked = agentTeamsEnabled;
     }
 
+    // KHA-267: Restore mixed-provider tab activation separately from runnable route config.
+    const mixedProvidersEnabled = Boolean(config.featureFlags?.enableMixedProviders ?? config.mixedProviders?.enabled ?? false);
+    state.featureFlags.enableMixedProviders = mixedProvidersEnabled;
+    state.mixedProviders = config.mixedProviders || null;
+    
+    // Restore mixed tabs from saved config
+    if (state.mixedProviders && state.mixedProviders.enabled) {
+      const providersInConfig = [
+        state.mixedProviders.reasoning?.providerId,
+        state.mixedProviders.completion?.providerId,
+        state.mixedProviders.value?.providerId
+      ].filter(Boolean);
+      
+      const uniqueProviders = [...new Set(providersInConfig)];
+      
+      const secondaryProviders = uniqueProviders.filter(pid => pid !== state.provider);
+      
+      mixedTabState.providerIds['primary'] = state.provider;
+      
+      if (secondaryProviders.length > 0) {
+        mixedTabState.tabCount = Math.min(2, secondaryProviders.length);
+        for (let i = 0; i < mixedTabState.tabCount; i++) {
+          const tabId = String(i + 1);
+          mixedTabState.providerIds[tabId] = secondaryProviders[i];
+          const tabBtn = document.getElementById(`providerTab-${tabId}`);
+          if (tabBtn) {
+            tabBtn.style.display = 'inline-block';
+            if (typeof updateTabLabel === 'function') updateTabLabel(tabId);
+          }
+        }
+      }
+      
+      // Restore assignments
+      state.mixedTierAssignments = {
+        reasoning: state.mixedProviders.reasoning?.providerId || state.provider,
+        completion: state.mixedProviders.completion?.providerId || state.provider,
+        value: state.mixedProviders.value?.providerId || state.provider
+      };
+    }
+    
+    // Show/hide mixed providers status
+    const mixedProvidersStatus = document.getElementById('mixedProvidersStatus');
+    if (mixedProvidersStatus) {
+      mixedProvidersStatus.style.display = 'none'; // Replaced by distinct UI cards
+    }
+    if (typeof updateMixedProvidersUI === 'function') {
+      updateMixedProvidersUI();
+    }
+
     // Update selected models display
     updateSelectedModelsDisplay();
 
@@ -3032,6 +3142,8 @@
       'together': 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo, mistralai/Mixtral-8x7B-Instruct-v0.1, Qwen/Qwen2.5-72B-Instruct-Turbo',
       'deepseek': 'deepseek-chat, deepseek-coder',
       'glm': 'glm-4-plus, glm-4',
+      'minimax': 'MiniMax-M2.7, MiniMax-M2.7-highspeed',
+      'kimi': 'kimi-for-coding',
       'custom': 'gpt-4, claude-3-opus, llama-3'
     };
     
@@ -3178,4 +3290,331 @@
     
     // Could add a toast notification here with structuredPayload.error
   }
+
+  // ==========================================
+  // Phase 3b: Tabbed Mixed Providers UI Logic
+  // ==========================================
+
+  // Track state for secondary provider tabs
+  const mixedTabState = {
+    activeTab: 'primary', // Which tab is currently shown
+    tabCount: 0,          // 0 = no secondary tabs, 1 = Provider 2, 2 = Provider 2+3
+    providerIds: {
+      'primary': '',
+      '1': '',
+      '2': ''
+    }
+  };
+
+  // Tracks which provider is assigned to which tier for mixed mode
+  state.mixedTierAssignments = {
+    reasoning: '',
+    completion: '',
+    value: ''
+  };
+
+  function updateMixedProvidersUI() {
+    const tabBar = document.getElementById('providerTabBar');
+    const addBtn = document.getElementById('addProviderTabBtn');
+    const providerCardTitle = document.getElementById('providerCardTitle');
+    
+    const flagEnabled = state.featureFlags.enableMixedProviders;
+    const showTabHeader = state.twoModelMode;
+
+    if (tabBar) {
+      tabBar.style.display = showTabHeader ? 'flex' : 'none';
+      if (providerCardTitle) providerCardTitle.style.display = showTabHeader ? 'none' : 'block';
+    }
+
+    const primaryTab = document.getElementById('providerTab-primary');
+    if (primaryTab) {
+      primaryTab.textContent = flagEnabled ? 'Provider 1' : 'Provider';
+    }
+
+    if (addBtn) {
+      addBtn.style.display = (state.twoModelMode && mixedTabState.tabCount < 2) ? 'inline-block' : 'none';
+    }
+
+    if (!showTabHeader && mixedTabState.activeTab !== 'primary') {
+      switchToTab('primary');
+    }
+
+    updateTabKeyBadges();
+  }
+
+  function updateTabKeyBadges() {
+    // Redundant without the tier assignment blocks, but we can keep it around or ignore it safely.
+  }
+
+  function initMixedTabListeners() {
+    const addBtn = document.getElementById('addProviderTabBtn');
+    addBtn?.addEventListener('click', () => {
+      if (!state.twoModelMode) return;
+      if (mixedTabState.tabCount >= 2) return;
+
+      if (!mixedTabState.providerIds.primary) {
+        mixedTabState.providerIds.primary = state.provider;
+      }
+
+      if (!state.featureFlags.enableMixedProviders) {
+        state.featureFlags.enableMixedProviders = true;
+        vscode.postMessage({
+          type: 'updateFeatureFlag',
+          flag: 'enableMixedProviders',
+          value: true
+        });
+      }
+
+      mixedTabState.tabCount++;
+      const tabId = String(mixedTabState.tabCount);
+      const tabBtn = document.getElementById(`providerTab-${tabId}`);
+      if (tabBtn) tabBtn.style.display = 'inline-block';
+      
+      if (addBtn) {
+        addBtn.style.display = mixedTabState.tabCount < 2 ? 'inline-block' : 'none';
+      }
+
+      switchToTab(tabId);
+      updateMixedProvidersUI();
+      saveState();
+      saveMixedState();
+    });
+
+    document.querySelectorAll('.provider-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.classList?.contains('tab-close')) return;
+        const tabId = btn.getAttribute('data-tab');
+        if (tabId) switchToTab(tabId);
+      });
+    });
+
+    document.querySelectorAll('.tab-close').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const closeId = btn.getAttribute('data-close');
+        if (closeId) removeTab(closeId);
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        const closeId = btn.getAttribute('data-close');
+        if (closeId) removeTab(closeId);
+      });
+    });
+  }
+
+  function deactivateMixedProviderTabs() {
+    if (!state.featureFlags.enableMixedProviders && mixedTabState.tabCount === 0) return;
+
+    mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    mixedTabState.activeTab = 'primary';
+    mixedTabState.tabCount = 0;
+    mixedTabState.providerIds['1'] = '';
+    mixedTabState.providerIds['2'] = '';
+    state.featureFlags.enableMixedProviders = false;
+
+    const provider2Tab = document.getElementById('providerTab-1');
+    const provider3Tab = document.getElementById('providerTab-2');
+    if (provider2Tab) provider2Tab.style.display = 'none';
+    if (provider3Tab) provider3Tab.style.display = 'none';
+
+    vscode.postMessage({
+      type: 'updateFeatureFlag',
+      flag: 'enableMixedProviders',
+      value: false
+    });
+
+    saveMixedState();
+  }
+
+  function switchToTab(tabId) {
+    if (mixedTabState.activeTab !== tabId) {
+       mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    }
+    
+    mixedTabState.activeTab = tabId;
+
+    document.querySelectorAll('.provider-tab').forEach(t => {
+      const tId = t.getAttribute('data-tab');
+      const isActive = tId === tabId;
+      t.style.background = isActive ? 'var(--vscode-button-secondaryBackground, var(--vscode-editor-background))' : 'var(--vscode-input-background)';
+      t.style.borderBottom = isActive ? '2px solid var(--vscode-focusBorder)' : '1px solid var(--vscode-widget-border)';
+      t.style.color = isActive ? 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))' : 'var(--vscode-descriptionForeground)';
+    });
+
+    // Handle provider selection for this tab
+    let providerId = mixedTabState.providerIds[tabId];
+    if (!providerId) {
+      providerId = state.provider;
+      mixedTabState.providerIds[tabId] = providerId;
+    }
+
+    const providerSelect = document.getElementById('providerSelect');
+    if (providerSelect) providerSelect.value = providerId;
+    
+    // Switch to the correct provider and models
+    state.provider = providerId;
+    
+    const provMaps = state.modelsByProvider[providerId] || {};
+    state.reasoningModel = provMaps.reasoning || '';
+    state.codingModel = provMaps.completion || '';
+    state.valueModel = provMaps.value || '';
+
+    if (state.modelsCache[providerId]) {
+      state.models = state.modelsCache[providerId];
+      renderModelList();
+    } else {
+      loadModels();
+    }
+
+    updateProviderUI();
+    updateSelectedModelsDisplay();
+    saveState();
+    vscode.postMessage({
+      type: 'updateProvider',
+      provider: state.provider
+    });
+    
+    updateTabLabel(tabId);
+  }
+
+  function updateTabLabel(tabId) {
+    if (tabId === 'primary') return;
+    const tabBtn = document.getElementById(`providerTab-${tabId}`);
+    if (!tabBtn) return;
+
+    let label = `Provider ${parseInt(tabId) + 1}`;
+    const pid = mixedTabState.providerIds[tabId] || state.provider;
+    if (pid && providers[pid]) {
+      label = providers[pid].name;
+    } else if (pid && state.customProviders) {
+      const cp = state.customProviders.find(p => p.id === pid);
+      if (cp) label = cp.name;
+    }
+    
+    const closeSpan = tabBtn.querySelector('.tab-close');
+    tabBtn.textContent = label + ' ';
+    if (closeSpan) tabBtn.appendChild(closeSpan);
+  }
+
+  function removeTab(tabId) {
+    const removedProviderId = mixedTabState.providerIds[tabId];
+    const primaryProviderId = mixedTabState.providerIds.primary || state.provider;
+    const tabBtn = document.getElementById(`providerTab-${tabId}`);
+    if (tabBtn) tabBtn.style.display = 'none';
+
+    mixedTabState.providerIds[tabId] = '';
+    if (removedProviderId) {
+      ['reasoning', 'completion', 'value'].forEach(tier => {
+        if (state.mixedTierAssignments?.[tier] === removedProviderId) {
+          state.mixedTierAssignments[tier] = primaryProviderId;
+        }
+      });
+    }
+
+    if (mixedTabState.activeTab === tabId) {
+      switchToTab('primary');
+    }
+
+    if (tabId === '1' && mixedTabState.tabCount === 2) {
+      const shiftedProviderId = mixedTabState.providerIds['2'];
+      mixedTabState.providerIds['1'] = mixedTabState.providerIds['2'];
+      mixedTabState.providerIds['2'] = '';
+      if (shiftedProviderId) {
+        ['reasoning', 'completion', 'value'].forEach(tier => {
+          if (state.mixedTierAssignments?.[tier] === shiftedProviderId) {
+            state.mixedTierAssignments[tier] = shiftedProviderId;
+          }
+        });
+      }
+      
+      const tab2Btn = document.getElementById('providerTab-2');
+      if (tab2Btn) tab2Btn.style.display = 'none';
+      
+      const tab1Btn = document.getElementById('providerTab-1');
+      if (tab1Btn) {
+        tab1Btn.style.display = 'inline-block';
+        updateTabLabel('1');
+      }
+    }
+
+    mixedTabState.tabCount = Math.max(0, mixedTabState.tabCount - 1);
+
+    if (mixedTabState.tabCount === 0 && state.featureFlags.enableMixedProviders) {
+      state.featureFlags.enableMixedProviders = false;
+      vscode.postMessage({
+        type: 'updateFeatureFlag',
+        flag: 'enableMixedProviders',
+        value: false
+      });
+    }
+
+    updateMixedProvidersUI();
+    saveMixedState();
+  }
+
+  function saveMixedState() {
+    // Use assignments if present, otherwise fallback to primary provider
+    const pID = mixedTabState.providerIds['primary'] || state.provider;
+    const rProvider = state.mixedTierAssignments.reasoning || pID;
+    const cProvider = state.mixedTierAssignments.completion || pID;
+    const vProvider = state.mixedTierAssignments.value || pID;
+
+    const tierMap = {
+      reasoning: { providerId: rProvider, model: state.modelsByProvider[rProvider]?.reasoning || '' },
+      completion: { providerId: cProvider, model: state.modelsByProvider[cProvider]?.completion || '' },
+      value: { providerId: vProvider, model: state.modelsByProvider[vProvider]?.value || '' }
+    };
+    const routeConfigComplete = Object.values(tierMap)
+      .every(tier => tier.providerId && tier.model);
+
+    const mixedConfig = {
+      enabled: Boolean(state.featureFlags.enableMixedProviders && mixedTabState.tabCount > 0 && routeConfigComplete),
+      reasoning: buildTierPayload(tierMap.reasoning),
+      completion: buildTierPayload(tierMap.completion),
+      value: buildTierPayload(tierMap.value)
+    };
+
+    state.mixedProviders = mixedConfig;
+
+    vscode.postMessage({
+      type: 'saveMixedProviders',
+      ...mixedConfig
+    });
+  }
+
+  function buildTierPayload(tierInfo) {
+    const pid = tierInfo.providerId || 'openrouter';
+    let baseUrl = '';
+    let endpointKind = 'auto';
+
+    if (providers[pid]) {
+      baseUrl = providers[pid].baseUrl || '';
+      endpointKind = providers[pid].endpointKind || 'auto';
+    } else if (state.customProviders) {
+      const custom = state.customProviders.find(p => p.id === pid);
+      if (custom?.baseUrl) baseUrl = custom.baseUrl;
+      endpointKind = custom?.endpointKind || 'auto';
+    }
+
+    return {
+      providerId: pid,
+      model: tierInfo.model || '',
+      displayModel: tierInfo.model || '',
+      baseUrl: normalizeBaseUrlForOverride(baseUrl),
+      endpointKind: endpointKindForBase(baseUrl, endpointKind)
+    };
+  }
+
+  // Hook the provider change into secondary tab tracking
+  function onProviderChangeForMixedTab() {
+    if (!state.featureFlags.enableMixedProviders) return;
+    
+    mixedTabState.providerIds[mixedTabState.activeTab] = state.provider;
+    updateTabLabel(mixedTabState.activeTab);
+    updateTabKeyBadges();
+    saveMixedState();
+  }
+
 })();

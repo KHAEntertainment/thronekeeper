@@ -18,6 +18,12 @@ import { injectXMLToolInstructions } from './xml-tool-formatter.js'
 import { parseAssistantMessage } from './xml-tool-parser.js'
 import { redactSecrets } from './utils/redaction.js'
 import { PGP_BLOCK_PATTERN, stripPgpBlocks, GROK_AGENT_COUNTS, HIGH_THINKING_PHRASES, detectHighThinking } from './utils/grok-multiagent.js'
+import { createRouterFromEnv } from './provider-router.js'
+import { TransformerRegistry, applyTransformers, applyReverseTransformers } from './transformers.js'
+import tooluseTransformer from './transformers/tooluse.js'
+import reasoningTransformer from './transformers/reasoning.js'
+import maxtokenTransformer from './transformers/maxtoken.js'
+import enhancetoolTransformer from './transformers/enhancetool.js'
 
 let packageVersion = '0.0.0'
 let packageDir = null
@@ -96,7 +102,18 @@ const models = {
 
 const ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || '2023-06-01'
 const ANTHROPIC_BETA = process.env.ANTHROPIC_BETA
-const KEY_ENV_HINT = 'CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY'
+const KEY_ENV_HINT = 'CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, GROK_API_KEY, XAI_API_KEY'
+
+// Mixed-provider router (KHA-267): initialized from MIXED_PROVIDERS_CONFIG env var
+// When active, routes each request to the correct upstream provider based on model name → tier mapping
+// When null, all behavior is identical to single-provider mode (backward compat)
+const router = createRouterFromEnv(process.env, endpointKindOverrides)
+
+const transformerRegistry = new TransformerRegistry()
+transformerRegistry.register('tooluse', tooluseTransformer)
+transformerRegistry.register('reasoning', reasoningTransformer)
+transformerRegistry.register('maxtoken', maxtokenTransformer)
+transformerRegistry.register('enhancetool', enhancetoolTransformer)
 
 const FALLBACK_XML_MODELS = [
   'inclusionai/ling-1t',
@@ -107,6 +124,7 @@ const FALLBACK_XML_MODELS = [
 ]
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS = ['openai', 'anthropic', 'openrouter', 'glm', 'deepseek']
 
 function matchesPattern(modelName, pattern) {
   if (typeof pattern !== 'string' || !pattern) return false
@@ -207,6 +225,34 @@ function getModelToolStyle(modelName, providerId) {
   return null
 }
 
+function getModelTransformers(modelName, providerId) {
+  if (!modelName || !providerId) return []
+  const config = modelCapabilities?.transformers || null
+  if (!config) return []
+
+  const providerConfig = config[providerId] || {}
+  // Custom endpoints may use familiar model IDs, but only trusted built-in provider
+  // patterns should be considered as fallback transformer sources.
+  const fallbackProviderConfigs = providerId === 'custom'
+    ? Object.entries(config)
+        .filter(([key]) => CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS.includes(key))
+        .flatMap(([, value]) => Object.entries(value || {}))
+    : []
+  const entries = [
+    ...Object.entries(config['*'] || {}),
+    ...fallbackProviderConfigs,
+    ...Object.entries(providerConfig),
+  ]
+
+  const matched = []
+  for (const [pattern, transformerConfigs] of entries) {
+    if (matchesPattern(modelName, pattern) && Array.isArray(transformerConfigs)) {
+      matched.push(...transformerConfigs)
+    }
+  }
+  return matched
+}
+
 /**
  * Parse native OpenAI tool response format (for models that support it)
  */
@@ -263,7 +309,10 @@ console.log(`[Startup] - Completion Model: ${models.completion}`)
 console.log(`[Startup] - API Key: ${key ? 'present' : 'MISSING'}`)
 console.log(`[Startup] - API Key Source: ${keySource || 'none'}`)
 console.log(`[Startup] - Debug Mode: ${process.env.DEBUG ? 'enabled' : 'disabled'}`)
-if (models.reasoning !== models.completion) {
+if (router) {
+  console.log('[Startup] - Mixed-provider mode: ACTIVE')
+  console.log(`[Startup] - Router: ${JSON.stringify(router.toDebugObject())}`)
+} else if (models.reasoning !== models.completion) {
   console.log('[Startup] - Two-model mode detected')
 } else {
   console.log('[Startup] - Single-model mode')
@@ -365,7 +414,13 @@ function buildUpstreamHeaders({ provider: providerId, endpointKind: upstreamKind
     return headers
   }
 
-  if (upstreamKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+  const normalizedKind = String(upstreamKind || '').toLowerCase()
+  const isAnthropicNative =
+    normalizedKind === ENDPOINT_KIND.ANTHROPIC_NATIVE ||
+    normalizedKind === 'anthropic' ||
+    normalizedKind === 'anthropic-native'
+
+  if (isAnthropicNative) {
     headers['x-api-key'] = apiKey
     headers['anthropic-version'] = ANTHROPIC_VERSION
     if (ANTHROPIC_BETA) {
@@ -476,7 +531,9 @@ fastify.get('/v1/models', async (request, reply) => {
  *  - forcedProvider: value of FORCE_PROVIDER (if set)
  */
 async function healthCheckHandler(request, reply) {
-  const isReady = !!key // Proxy is ready when API key is available
+  const routerValidation = router ? router.validate() : null
+  const routerReady = Boolean(routerValidation?.valid)
+  const isReady = Boolean(key || routerReady) // Single-provider key or complete mixed-provider router
   const status = isReady ? 'ok' : 'unhealthy'
   
   if (!isReady) {
@@ -511,12 +568,15 @@ async function healthCheckHandler(request, reply) {
       currentCompletion: models.completion || 'not set'
     },
     timestamp: Date.now(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    mixedProviders: router ? router.toDebugObject() : null,
+    readinessSource: key ? 'single-provider-key' : (routerReady ? 'mixed-provider-router' : 'missing-key'),
   }
   
   if (!isReady) {
     healthResponse.missingKey = true
     healthResponse.keySourcesTried = KEY_ENV_HINT
+    if (routerValidation && !routerValidation.valid) healthResponse.missingMixedProviderKeys = routerValidation.missing
     healthResponse.endpointKind = endpointKind
     if (baseUrl) healthResponse.baseUrl = baseUrl
     if (process.env.FORCE_PROVIDER) healthResponse.forcedProvider = process.env.FORCE_PROVIDER
@@ -648,7 +708,7 @@ fastify.post('/v1/debug/echo', async (request, reply) => {
       },
     }))
 
-    const selectedModel = payload.model 
+    const selectedModel = payload.model
       || (payload.thinking ? models.reasoning : models.completion)
 
     // Conditionally inject XML tool instructions for models that need them
@@ -728,23 +788,63 @@ fastify.post('/v1/messages', async (request, reply) => {
     let firstChunkLogged = false
     let ttfbMs = null
     
-    // Comment 1: Gate requests until endpoint kind is determined for custom providers
-    const negotiationError = await ensureEndpointKindReady()
-    if (negotiationError) {
-      reply.code(negotiationError.statusCode)
-      return negotiationError.body
+    // KHA-267: Mixed-provider routing
+    // When the router is active, resolve the correct ProviderContext for this request's model.
+    // If the model is found in the tier map, use that provider's baseUrl/key/endpointKind.
+    // Otherwise, fall through to the existing single-provider flow.
+    let routedContext = null
+    if (router && payload.model) {
+      const resolved = router.resolve(payload.model)
+      if (resolved) {
+        routedContext = resolved.context
+        console.log(`[Mixed Router] Model "${payload.model}" → tier "${resolved.tier}" → provider "${routedContext.providerId}" (${routedContext.endpointKind})`)
+      } else {
+        reply.code(400)
+        return {
+          error: {
+            type: 'invalid_model',
+            message: `Model "${payload.model}" is not configured in MIXED_PROVIDERS_CONFIG`
+          }
+        }
+      }
     }
     
-    const isAnthropicNative = endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE
+    // Effective provider state: routed context takes priority over global state
+    const effectiveProvider = routedContext?.providerId || provider
+    const effectiveBaseUrl = routedContext?.baseUrl || normalizedBaseUrl
+    const effectiveKey = routedContext?.key || key
+    
+    // Comment 1: Gate requests until endpoint kind is determined for custom providers
+    // Skip negotiation when using routed context (endpoint kind already resolved at startup)
+    if (!routedContext) {
+      const negotiationError = await ensureEndpointKindReady()
+      if (negotiationError) {
+        reply.code(negotiationError.statusCode)
+        return negotiationError.body
+      }
+    }
+    
+    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind
+    const normalizedEffectiveEndpointKind = String(effectiveEndpointKind || '').toLowerCase()
+    const isAnthropicNative =
+      normalizedEffectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE ||
+      normalizedEffectiveEndpointKind === 'anthropic' ||
+      normalizedEffectiveEndpointKind === 'anthropic-native'
 
-    if (!key) {
+    if (!effectiveKey) {
       reply.code(400)
+      const providerEnvHint =
+        effectiveProvider === 'deepseek' ? 'DEEPSEEK_API_KEY'
+          : effectiveProvider === 'glm' ? 'ZAI_API_KEY or GLM_API_KEY'
+            : effectiveProvider === 'kimi' ? 'KIMI_API_KEY'
+              : effectiveProvider === 'minimax' ? 'MINIMAX_API_KEY'
+                : 'API_KEY'
       const hint = isAnthropicNative
-        ? `Store the provider API key in the extension (Thronekeeper: Store ${provider === 'deepseek' ? 'Deepseek' : provider === 'glm' ? 'GLM' : provider} API Key) or set the correct env var (${provider === 'deepseek' ? 'DEEPSEEK_API_KEY' : provider === 'glm' ? 'ZAI_API_KEY or GLM_API_KEY' : 'API_KEY'}), and confirm the provider switch in settings.`
-        : `Use Authorization: Bearer <token> header or configure ${provider === 'openrouter' ? 'OpenRouter' : provider} API key in the extension settings.`
+        ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === 'deepseek' ? 'Deepseek' : effectiveProvider === 'glm' ? 'GLM' : effectiveProvider} API Key) or set the correct env var (${providerEnvHint}), and confirm the provider switch in settings.`
+        : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === 'openrouter' ? 'OpenRouter' : effectiveProvider} API key in the extension settings.`
       return {
         error: {
-          message: `No API key found for provider "${provider}". Checked ${KEY_ENV_HINT}.`,
+          message: `No API key found for provider "${effectiveProvider}". Checked ${KEY_ENV_HINT}.`,
           type: 'missing_api_key',
           hint
         }
@@ -752,12 +852,16 @@ fastify.post('/v1/messages', async (request, reply) => {
     }
 
     const requestUrl = isAnthropicNative
-      ? `${normalizedBaseUrl}/v1/messages`
-      : `${normalizedBaseUrl}/v1/chat/completions`
-    const headers = buildUpstreamHeaders({ provider, endpointKind, key })
+      ? `${effectiveBaseUrl}/v1/messages`
+      : `${effectiveBaseUrl}/v1/chat/completions`
+    const headers = buildUpstreamHeaders({
+      provider: effectiveProvider,
+      endpointKind: effectiveEndpointKind,
+      key: effectiveKey
+    })
 
     if (isAnthropicNative) {
-      console.log(`[Anthropic Native] Handling request for provider: ${provider}`)
+      console.log(`[Anthropic Native] Handling request for provider: ${effectiveProvider}`)
       console.log(`[Anthropic Native] Forwarding to: ${requestUrl}`)
       console.log(`[Anthropic Native] Authentication: x-api-key header injected`)
     }
@@ -765,7 +869,10 @@ fastify.post('/v1/messages', async (request, reply) => {
     console.log(`[Request] Starting request to ${requestUrl}`)
 
     if (isAnthropicNative) {
-      const anthropicPayload = buildAnthropicPayload(payload)
+      const anthropicPayload = buildAnthropicPayload({
+        ...payload,
+        model: routedContext?.model || payload.model,
+      })
 
       const upstreamResponse = await fetch(requestUrl, {
         method: 'POST',
@@ -792,7 +899,7 @@ fastify.post('/v1/messages', async (request, reply) => {
 
         console.error('[Anthropic Error]', {
           status: upstreamResponse.status,
-          provider,
+          effectiveProvider,
           messageCount: Array.isArray(payload?.messages) ? payload.messages.length : 0,
           error: errorJson.error?.message?.slice?.(0, 200) || errorDetails.slice(0, 200),
         })
@@ -917,7 +1024,7 @@ fastify.post('/v1/messages', async (request, reply) => {
 
     // Comment 2: Guard - never run OpenAI↔Anthropic mapping when endpoint-kind is Anthropic
     // At this point, isAnthropicNative is false, so we proceed with OpenAI-compatible flow
-    if (endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+    if (effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
       console.error('[Guard Violation] Anthropic-native endpoint reached OpenAI conversion path - this should not happen')
       reply.code(500)
       return { error: { message: 'Internal error: endpoint kind mismatch', type: 'internal_error' } }
@@ -989,9 +1096,15 @@ fastify.post('/v1/messages', async (request, reply) => {
       },
     }))
     const responseWarnings = []
-    const selectedModel = payload.model 
+    const selectedModel = routedContext?.model
+      || payload.model
       || (payload.thinking ? models.reasoning : models.completion)
-    const toolStyle = getModelToolStyle(selectedModel, provider)
+    const toolStyle = getModelToolStyle(selectedModel, effectiveProvider)
+    const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider)
+    const hasTooluseTransformer = transformerConfigs.some(config => {
+      const name = Array.isArray(config) ? config[0] : config
+      return name === 'tooluse'
+    })
     const preferJsonTools = toolStyle === 'json'
     if (toolStyle) {
       console.log(`[Tool Style] ${selectedModel} matched toolStyle=${toolStyle}`)
@@ -1022,10 +1135,10 @@ fastify.post('/v1/messages', async (request, reply) => {
     }
 
     // Comment 4: Check tool calling capability for OpenRouter models
-    const supportsToolCalling = modelSupportsToolCalling(selectedModel, provider)
+    const supportsToolCalling = modelSupportsToolCalling(selectedModel, effectiveProvider)
     let shouldDropTools = false
     
-    if (provider === 'openrouter' && tools.length > 0 && !supportsToolCalling) {
+    if (effectiveProvider === 'openrouter' && tools.length > 0 && !supportsToolCalling) {
       console.warn(`[Tool Capability] Model ${selectedModel} does not support tool calling. Stripping tools and tool_choice.`)
       shouldDropTools = true
       responseWarnings.push(`Tool calling is unavailable for ${selectedModel}; the proxy converted available tools into plain instructions.`)
@@ -1033,7 +1146,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     
     // Conditionally inject XML tool instructions for models that need them
     const enableJsonTools = !shouldDropTools && preferJsonTools && tools.length > 0
-    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, provider)
+    const needsXMLTools = !shouldDropTools && !hasTooluseTransformer && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider)
     const messagesWithXML = needsXMLTools
       ? injectXMLToolInstructions(messages, tools)
       : messages
@@ -1051,7 +1164,7 @@ fastify.post('/v1/messages', async (request, reply) => {
       openaiPayload.tools = tools
       if (payload.tool_choice) {
         // Comment 1: Normalize tool_choice for OpenRouter - use string 'auto' instead of object
-        if (provider === 'openrouter' && typeof payload.tool_choice === 'object' && payload.tool_choice.type === 'auto') {
+        if (effectiveProvider === 'openrouter' && typeof payload.tool_choice === 'object' && payload.tool_choice.type === 'auto') {
           openaiPayload.tool_choice = 'auto'
         } else {
           openaiPayload.tool_choice = payload.tool_choice
@@ -1061,7 +1174,7 @@ fastify.post('/v1/messages', async (request, reply) => {
         openaiPayload.parallel_tool_calls = false
         if (!openaiPayload.tool_choice) {
           // Comment 1: For OpenRouter, use string 'auto' instead of object format
-          openaiPayload.tool_choice = provider === 'openrouter' ? 'auto' : { type: 'auto' }
+          openaiPayload.tool_choice = effectiveProvider === 'openrouter' ? 'auto' : { type: 'auto' }
         }
       }
     } else if (shouldDropTools && tools.length > 0) {
@@ -1078,7 +1191,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     }
 
     // Add extra_body.agent_count for Grok multi-agent mode
-    if (provider === 'grok') {
+    if (effectiveProvider === 'grok') {
       // Determine if multi-agent mode should be activated
       // Priority: explicit payload.thinking > auto-detect from prompt > default low (4)
       let agentCount = GROK_AGENT_COUNTS.low // Default to low
@@ -1106,7 +1219,11 @@ fastify.post('/v1/messages', async (request, reply) => {
       }
     }
 
-    debug('OpenAI payload:', openaiPayload)
+    const transformedOpenaiPayload = transformerConfigs.length > 0
+      ? await applyTransformers(transformerConfigs, openaiPayload, transformerRegistry)
+      : openaiPayload
+
+    debug('OpenAI payload:', transformedOpenaiPayload)
 
     // Tool mode logging and detection
     if (tools.length > 0) {
@@ -1139,7 +1256,7 @@ fastify.post('/v1/messages', async (request, reply) => {
     const openaiResponse = await fetch(requestUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(openaiPayload)
+      body: JSON.stringify(transformedOpenaiPayload)
     });
     
     const elapsedMs = Date.now() - requestStartMs
@@ -1216,7 +1333,7 @@ fastify.post('/v1/messages', async (request, reply) => {
       console.error('[OpenRouter Error]', {
         status: openaiResponse.status,
         model: '[REDACTED]',
-        provider,
+        effectiveProvider,
         messageCount: messages.length,
         toolCount: tools.length,
         error: errorJson.error?.message || errorDetails.substring(0, 200)
@@ -1277,7 +1394,7 @@ fastify.post('/v1/messages', async (request, reply) => {
       const openaiMessage = choice.message
 
       // Strip PGP blocks from Grok multi-agent responses
-      if (provider === 'grok' && selectedModel.includes('multi-agent')) {
+      if (effectiveProvider === 'grok' && selectedModel.includes('multi-agent')) {
         openaiMessage.content = stripPgpBlocks(openaiMessage.content)
       }
 
@@ -1305,6 +1422,17 @@ fastify.post('/v1/messages', async (request, reply) => {
           type: 'text',
           text: openaiMessage.content || ''
         }]
+      }
+
+      if (transformerConfigs.length > 0) {
+        const transformedResponse = await applyReverseTransformers(
+          transformerConfigs,
+          { content: contentBlocks },
+          transformerRegistry
+        )
+        if (Array.isArray(transformedResponse.content)) {
+          contentBlocks = transformedResponse.content
+        }
       }
 
       // Ensure we have at least one content block
@@ -1407,12 +1535,28 @@ fastify.post('/v1/messages', async (request, reply) => {
     let fullContent = ''  // Accumulate full content for XML parsing at end
     let usage = null
     let textBlockStarted = false
+    let thinkingBlockStarted = false
+    let textBlockIndex = 0
+    let thinkingBlockIndex = 0
+    let nextContentBlockIndex = 0
     let encounteredToolCall = false
     const toolCallAccumulators = {}  // key: tool call index, value: accumulated arguments string
+    const toolCallIndexMap = new Map()  // key: upstream tool call index, value: Anthropic content block index
     let chunkBuffer = ''  // Buffer for incomplete JSON chunks
     const decoder = new TextDecoder('utf-8')
     const reader = openaiResponse.body.getReader()
     let done = false
+    const sendContentSSE = async (event, payload) => {
+      let eventPayload = payload
+      if (transformerConfigs.length > 0) {
+        eventPayload = await applyReverseTransformers(
+          transformerConfigs,
+          eventPayload,
+          transformerRegistry
+        )
+      }
+      sendSSE(reply, event, eventPayload)
+    }
 
     try {
       while (!done) {
@@ -1450,9 +1594,9 @@ fastify.post('/v1/messages', async (request, reply) => {
                   if (finalParsed.choices?.[0]?.delta?.content) {
                     accumulatedContent += finalParsed.choices[0].delta.content
                     if (textBlockStarted) {
-                      sendSSE(reply, 'content_block_delta', {
+                      await sendContentSSE('content_block_delta', {
                         type: 'content_block_delta',
-                        index: 0,
+                        index: textBlockIndex,
                         delta: {
                           type: 'text_delta',
                           text: finalParsed.choices[0].delta.content
@@ -1466,7 +1610,7 @@ fastify.post('/v1/messages', async (request, reply) => {
                 chunkBuffer = ''
               }
               // Strip PGP blocks from Grok multi-agent streaming responses
-              if (provider === 'grok' && selectedModel.includes('multi-agent')) {
+              if (effectiveProvider === 'grok' && selectedModel.includes('multi-agent')) {
                 accumulatedContent = stripPgpBlocks(accumulatedContent)
               }
               const trimmedContent = accumulatedContent.trim()
@@ -1477,18 +1621,19 @@ fastify.post('/v1/messages', async (request, reply) => {
                   : 'Model response was empty.'
                 if (!textBlockStarted) {
                   textBlockStarted = true
-                  sendSSE(reply, 'content_block_start', {
+                  textBlockIndex = nextContentBlockIndex++
+                  await sendContentSSE('content_block_start', {
                     type: 'content_block_start',
-                    index: 0,
+                    index: textBlockIndex,
                     content_block: {
                       type: 'text',
                       text: ''
                     }
                   })
                 }
-                sendSSE(reply, 'content_block_delta', {
+                await sendContentSSE('content_block_delta', {
                   type: 'content_block_delta',
-                  index: 0,
+                  index: textBlockIndex,
                   delta: {
                     type: 'text_delta',
                     text: fallbackText
@@ -1505,18 +1650,25 @@ fastify.post('/v1/messages', async (request, reply) => {
               serverProcessingMs: ttfbMs ? ttfbMs - elapsedMs : null
             })
             // Finalize the stream with stop events.
+            if (thinkingBlockStarted) {
+              sendSSE(reply, 'content_block_stop', {
+                type: 'content_block_stop',
+                index: thinkingBlockIndex
+              })
+            }
+            if (textBlockStarted) {
+              sendSSE(reply, 'content_block_stop', {
+                type: 'content_block_stop',
+                index: textBlockIndex
+              })
+            }
             if (encounteredToolCall) {
-              for (const idx in toolCallAccumulators) {
+              for (const idx of Object.keys(toolCallAccumulators)) {
                 sendSSE(reply, 'content_block_stop', {
                   type: 'content_block_stop',
                   index: parseInt(idx, 10)
                 })
               }
-            } else if (textBlockStarted) {
-              sendSSE(reply, 'content_block_stop', {
-                type: 'content_block_stop',
-                index: 0
-              })
             }
             sendSSE(reply, 'message_delta', {
               type: 'message_delta',
@@ -1568,10 +1720,14 @@ fastify.post('/v1/messages', async (request, reply) => {
           if (delta && delta.tool_calls) {
             for (const toolCall of delta.tool_calls) {
               encounteredToolCall = true
-              const idx = toolCall.index
+              const upstreamToolIndex = String(toolCall.index ?? 0)
+              if (!toolCallIndexMap.has(upstreamToolIndex)) {
+                toolCallIndexMap.set(upstreamToolIndex, nextContentBlockIndex++)
+              }
+              const idx = toolCallIndexMap.get(upstreamToolIndex)
               if (toolCallAccumulators[idx] === undefined) {
                 toolCallAccumulators[idx] = ""
-                sendSSE(reply, 'content_block_start', {
+                await sendContentSSE('content_block_start', {
                   type: 'content_block_start',
                   index: idx,
                   content_block: {
@@ -1586,7 +1742,7 @@ fastify.post('/v1/messages', async (request, reply) => {
               const oldArgs = toolCallAccumulators[idx]
               if (newArgs.length > oldArgs.length) {
                 const deltaText = newArgs.substring(oldArgs.length)
-                sendSSE(reply, 'content_block_delta', {
+                await sendContentSSE('content_block_delta', {
                   type: 'content_block_delta',
                   index: idx,
                   delta: {
@@ -1604,42 +1760,45 @@ fastify.post('/v1/messages', async (request, reply) => {
             
             if (!textBlockStarted) {
               textBlockStarted = true
-              sendSSE(reply, 'content_block_start', {
+              textBlockIndex = nextContentBlockIndex++
+              await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
-                index: 0,
+                index: textBlockIndex,
                 content_block: {
                   type: 'text',
                   text: ''
                 }
               })
             }
-            sendSSE(reply, 'content_block_delta', {
+            await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
-              index: 0,
+              index: textBlockIndex,
               delta: {
                 type: 'text_delta',
                 text: delta.content
               }
             })
-          } else if (delta && delta.reasoning) {
-            if (!textBlockStarted) {
-              textBlockStarted = true
-              sendSSE(reply, 'content_block_start', {
+          } else if (delta && (delta.reasoning || delta.reasoning_content)) {
+            if (!thinkingBlockStarted) {
+              thinkingBlockStarted = true
+              thinkingBlockIndex = nextContentBlockIndex++
+              await sendContentSSE('content_block_start', {
                 type: 'content_block_start',
-                index: 0,
+                index: thinkingBlockIndex,
                 content_block: {
-                  type: 'text',
-                  text: ''
+                  type: 'thinking',
+                  thinking: ''
                 }
               })
             }
-            accumulatedReasoning += delta.reasoning
-            sendSSE(reply, 'content_block_delta', {
+            const reasoningText = delta.reasoning || delta.reasoning_content
+            accumulatedReasoning += reasoningText
+            await sendContentSSE('content_block_delta', {
               type: 'content_block_delta',
-              index: 0,
+              index: thinkingBlockIndex,
               delta: {
                 type: 'thinking_delta',
-                thinking: delta.reasoning
+                thinking: reasoningText
               }
             })
           }

@@ -1,9 +1,9 @@
 {
   "name": "thronekeeper",
   "displayName": "Thronekeeper",
-  "publisher": "thehive",
+  "publisher": "khaentertainment",
   "description": "Configure and run Thronekeeper proxy with secure credential storage and model routing.",
-  "version": "1.5.63",
+  "version": "1.5.71",
   "icon": "images/thronekeeper-logo.jpg",
   "license": "MIT",
   "repository": {
@@ -85,6 +85,10 @@
       {
         "command": "claudeThrone.storeMoonshotKey",
         "title": "Thronekeeper: Store Moonshot API Key"
+      },
+      {
+        "command": "claudeThrone.storeKimiKey",
+        "title": "Thronekeeper: Store Kimi API Key"
       },
       {
         "command": "claudeThrone.storeMinimaxKey",
@@ -373,6 +377,12 @@
             "default": {},
             "scope": "window",
             "markdownDescription": "Internal: Provider-specific model selections. Maps provider IDs to selected reasoning, completion, and value models. Managed automatically by the Thronekeeper panel. Do not edit manually."
+          },
+          "claudeThrone.mixedProviders": {
+            "type": ["object", "null"],
+            "default": null,
+            "scope": "window",
+            "markdownDescription": "Internal: Mixed-provider per-tier configuration (KHA-267). When set, each model tier (reasoning/completion/value) can route to a different API provider. Managed through the Thronekeeper panel. Do not edit manually."
           }
         }
       }
@@ -397,6 +407,7 @@
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.3.8",
     "esbuild": "^0.21.5",
+    "jsdom": "^29.0.2",
     "typescript": "^5.6.3",
     "vitest": "^1.4.0",
     "vsce": "^2.15.0"

@@ -42,6 +42,7 @@ const Secrets_1 = require("./services/Secrets");
 const ProxyManager_1 = require("./services/ProxyManager");
 const PanelViewProvider_1 = require("./views/PanelViewProvider");
 const ClaudeSettings_1 = require("./services/ClaudeSettings");
+const config_1 = require("./schemas/config");
 let proxy = null;
 /**
  * Update a claudeThrone setting in VS Code with validation and structured fallback handling.
@@ -136,6 +137,10 @@ async function fetchAnthropicDefaults(secrets) {
         }
         const data = await response.body.json();
         const models = data.data || [];
+        const debug = vscode.workspace.getConfiguration('claudeThrone').get('proxy.debug', false);
+        if (debug) {
+            console.log(`[fetchAnthropicDefaults] All ${models.length} models from API:`, models.map((m) => m.id));
+        }
         // Helper to select best model: prefer -latest alias, exclude -preview and other unstable suffixes
         const selectBestModel = (filtered, fallback) => {
             if (filtered.length === 0)
@@ -191,13 +196,13 @@ async function fetchAnthropicDefaults(secrets) {
         };
         // Find latest Opus model
         const opusModels = models.filter((m) => m.id.includes('opus'));
-        const opus = selectBestModel(opusModels, 'claude-opus-4-1-20250805');
+        const opus = selectBestModel(opusModels, 'claude-opus-4-6-latest');
         // Find latest Sonnet model
         const sonnetModels = models.filter((m) => m.id.includes('sonnet'));
-        const sonnet = selectBestModel(sonnetModels, 'claude-sonnet-4-5-20250929');
+        const sonnet = selectBestModel(sonnetModels, 'claude-sonnet-4-6-latest');
         // Find latest Haiku model
         const haikuModels = models.filter((m) => m.id.includes('haiku'));
-        const haiku = selectBestModel(haikuModels, 'claude-3-5-haiku-latest');
+        const haiku = selectBestModel(haikuModels, 'claude-haiku-4-5-latest');
         // Add detailed logging
         console.log(`[fetchAnthropicDefaults] Model selection summary:`);
         console.log(`  Opus: ${opusModels.length} candidates, selected: ${opus}`);
@@ -218,7 +223,7 @@ async function fetchAnthropicDefaults(secrets) {
         const authStatus = secrets ? (await secrets.getAnthropicKey() ? 'authenticated' : 'unauthenticated') : 'no secrets service';
         console.error(`[fetchAnthropicDefaults] Failed to fetch (${authStatus}):`, error);
         // Return hardcoded fallbacks if fetch fails
-        return { opus: 'claude-opus-4-1-20250805', sonnet: 'claude-sonnet-4-5-20250929', haiku: 'claude-3-5-haiku-latest' };
+        return { opus: 'claude-opus-4-6', sonnet: 'claude-sonnet-4-6', haiku: 'claude-haiku-4-5' };
     }
 }
 /**
@@ -336,73 +341,25 @@ function activate(context) {
                     settingsDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
                 }
             }
-            // Check cache age before fetching fresh defaults
-            const cachedTimestamp = cfg.get('anthropicDefaultsTimestamp', 0);
-            const cacheAge = Date.now() - cachedTimestamp;
-            const stalenessThreshold = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-            if (cachedTimestamp > 0 && cacheAge > stalenessThreshold) {
-                const daysOld = Math.floor(cacheAge / (24 * 60 * 60 * 1000));
-                log.appendLine(`[revertApply] ⚠️ Cache is ${daysOld} days old (threshold: 7 days), fetching fresh defaults...`);
-            }
-            else if (cachedTimestamp > 0) {
-                const daysOld = Math.floor(cacheAge / (24 * 60 * 60 * 1000));
-                log.appendLine(`[revertApply] Cache is ${daysOld} days old, fetching fresh defaults...`);
-            }
-            else {
-                log.appendLine('[revertApply] No cache timestamp found, fetching fresh defaults...');
-            }
-            // Try to fetch fresh defaults from API (if key is available)
-            log.appendLine('[revertApply] Attempting to fetch fresh Anthropic model defaults...');
-            let defaults = await fetchAnthropicDefaults(secrets);
-            let usedFreshDefaults = true;
-            if (defaults.opus && defaults.sonnet && defaults.haiku) {
-                log.appendLine(`[revertApply] ✅ Fetched fresh defaults: opus=${defaults.opus}, sonnet=${defaults.sonnet}, haiku=${defaults.haiku}`);
-                // Update cache with fresh values using safe configuration updates
-                const defaultsSuccess = await safeConfigUpdate(cfg, 'anthropicDefaults', defaults, vscode.ConfigurationTarget.Global);
-                const timestampSuccess = await safeConfigUpdate(cfg, 'anthropicDefaultsTimestamp', Date.now(), vscode.ConfigurationTarget.Global);
-                if (!defaultsSuccess || !timestampSuccess) {
-                    log.appendLine('[revertApply] ⚠️ Failed to cache fresh defaults, but will continue with revert operation');
-                }
-            }
-            else {
-                // Should not happen since fetchAnthropicDefaults always returns defaults, but keep fallback logic
-                log.appendLine('[revertApply] ⚠️ Unexpected: defaults missing fields, falling back to cached values');
-                usedFreshDefaults = false;
-                const cached = cfg.get('anthropicDefaults', null);
-                if (cached)
-                    defaults = cached;
-            }
-            // Single atomic operation: remove Thronekeeper overrides and restore Anthropic defaults
+            // Remove ALL ThroneKeeper overrides — let Claude Code use its built-in defaults.
+            // No need to fetch from Anthropic API; Claude Code resolves its own defaults
+            // when these keys are absent from settings.
             if (settingsDir) {
                 const restoreEnv = {
-                    // Always set base URL to Anthropic
-                    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+                    ANTHROPIC_BASE_URL: null,
+                    ANTHROPIC_MODEL: null,
+                    ANTHROPIC_DEFAULT_OPUS_MODEL: null,
+                    ANTHROPIC_DEFAULT_SONNET_MODEL: null,
+                    ANTHROPIC_DEFAULT_HAIKU_MODEL: null,
+                    API_TIMEOUT_MS: null,
+                    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: null,
+                    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: null,
                 };
-                // If we have cached defaults, restore model settings
-                if (defaults?.opus && defaults?.sonnet && defaults?.haiku) {
-                    restoreEnv.ANTHROPIC_MODEL = defaults.sonnet;
-                    restoreEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = defaults.opus;
-                    restoreEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = defaults.sonnet;
-                    restoreEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = defaults.haiku;
-                }
-                else {
-                    // No cached defaults: explicitly remove model env vars
-                    // (Claude Code will use its own defaults)
-                    restoreEnv.ANTHROPIC_MODEL = null;
-                    restoreEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = null;
-                    restoreEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = null;
-                    restoreEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = null;
-                }
-                // Remove Claude Code environment variables when reverting
-                restoreEnv.API_TIMEOUT_MS = null;
-                restoreEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = null;
-                restoreEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = null;
-                // Single call: atomic update
-                await (0, ClaudeSettings_1.updateClaudeSettings)(settingsDir, restoreEnv, /*revert*/ false);
+                await (0, ClaudeSettings_1.updateClaudeSettings)(settingsDir, restoreEnv, /*revert=*/ false);
             }
             // NOTE: We do NOT clear reasoningModel/completionModel here anymore
             // User's saved model preferences should persist across proxy stop/start cycles
-            // Only .claude/settings.json is reverted to Anthropic defaults for Claude Code CLI
+            // Only .claude/settings.json is reverted to clean state for Claude Code CLI
             // Restore base URL to Anthropic defaults in extension settings
             const candidates = [
                 { section: 'anthropic', key: 'baseUrl' },
@@ -482,15 +439,13 @@ function activate(context) {
                 parts.push(`extensions: ${restored.join(', ')}`);
             if (termTouched)
                 parts.push(`terminal env: ${termTouched} target(s)`);
-            if (defaults && defaults.opus && defaults.sonnet && defaults.haiku) {
-                const source = usedFreshDefaults ? 'fetched latest from API' : 'cached';
-                parts.push(`models (${source}): ${defaults.opus.split('-').slice(-1)[0]} (Opus), ${defaults.sonnet.split('-').slice(-1)[0]} (Sonnet), ${defaults.haiku.split('-').slice(-1)[0]} (Haiku)`);
-            }
+            if (settingsDir)
+                parts.push('.claude/settings.json cleaned');
             if (parts.length) {
-                vscode.window.showInformationMessage(`Restored Anthropic defaults (${parts.join(' | ')}). Open a new terminal for env changes to take effect.`);
+                vscode.window.showInformationMessage(`Reverted ThroneKeeper overrides (${parts.join(', ')}). Claude Code will use its built-in defaults.`);
             }
             else {
-                vscode.window.showInformationMessage('No Claude overrides were found to restore.');
+                vscode.window.showInformationMessage('No ThroneKeeper overrides were found to revert.');
             }
         }
         catch (err) {
@@ -552,7 +507,6 @@ function activate(context) {
     const storeAnthropicKey = vscode.commands.registerCommand('claudeThrone.storeAnthropicKey', async () => {
         await storeAnthropicKeyHelper(secrets);
     });
-    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeKimiKey, storeMinimaxKey, storeCustomKey, storeAnyKey, storeAnthropicKey);
     const refreshAnthropicDefaults = vscode.commands.registerCommand('claudeThrone.refreshAnthropicDefaults', async () => {
         try {
             const defaults = await fetchAnthropicDefaults(secrets);
@@ -593,11 +547,28 @@ function activate(context) {
             const reasoningModel = cfg.get('reasoningModel');
             const completionModel = cfg.get('completionModel');
             const twoModelMode = cfg.get('twoModelMode', false);
+            // KHA-267: Read mixed-provider configuration
+            const featureFlags = cfg.get('featureFlags', {});
+            const mixedProvidersRaw = featureFlags.enableMixedProviders ? cfg.get('mixedProviders', null) : null;
+            let mixedProviders = null;
+            if (mixedProvidersRaw?.enabled) {
+                const parsed = config_1.MixedProviderConfigSchema.safeParse(mixedProvidersRaw);
+                if (!parsed.success) {
+                    const message = `Invalid mixed-provider configuration: ${JSON.stringify(parsed.error.format())}`;
+                    log.appendLine(`[startProxy] ${message}`);
+                    throw new Error(message);
+                }
+                mixedProviders = parsed.data;
+            }
             log.appendLine(`[startProxy] Starting with config: provider=${provider}, port=${port}, twoModelMode=${twoModelMode}`);
             log.appendLine(`[startProxy] Models: reasoning=${reasoningModel}, completion=${completionModel}`);
+            if (mixedProviders?.enabled) {
+                log.appendLine(`[startProxy] Mixed provider mode: ACTIVE`);
+                log.appendLine(`[startProxy] Mixed config: ${JSON.stringify(mixedProviders)}`);
+            }
             // All providers (including Deepseek, GLM, and custom Anthropic endpoints) now route through the proxy
             // The proxy handles authentication and forwards requests to the appropriate provider URL
-            await proxy.start({ provider, customBaseUrl, port, debug, reasoningModel, completionModel });
+            await proxy.start({ provider, customBaseUrl, port, debug, reasoningModel, completionModel, mixedProviders });
             const elapsed = Date.now() - startTime;
             log.appendLine(`[startProxy] Proxy started in ${elapsed}ms`);
             vscode.window.showInformationMessage(`Thronekeeper: proxy started on port ${port}`);
@@ -1072,7 +1043,7 @@ function activate(context) {
             throw err;
         }
     }
-    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeCustomKey, storeAnyKey, storeAnthropicKey, refreshAnthropicDefaults, startProxy, stopProxy, status, applyToClaudeCode, revertApply, log, checkConfigHealthCommand);
+    context.subscriptions.push(openPanel, storeOpenRouterKey, storeOpenAIKey, storeTogetherKey, storeDeepseekKey, storeGlmKey, storeKimiKey, storeMinimaxKey, storeCustomKey, storeAnyKey, storeAnthropicKey, refreshAnthropicDefaults, startProxy, stopProxy, status, applyToClaudeCode, revertApply, log, checkConfigHealthCommand);
     log.appendLine('✅ Thronekeeper extension fully activated and ready');
 }
 /**

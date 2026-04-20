@@ -28789,7 +28789,7 @@ var require_route = __commonJS({
       "useSemicolonDelimiter"
     ];
     function buildRouting(options) {
-      const router = FindMyWay(options.config);
+      const router2 = FindMyWay(options.config);
       let avvio;
       let fourOhFour;
       let logger;
@@ -28822,7 +28822,7 @@ var require_route = __commonJS({
           return503OnClosing = Object.hasOwn(options2, "return503OnClosing") ? options2.return503OnClosing : true;
           keepAliveConnections = fastifyArgs.keepAliveConnections;
         },
-        routing: router.lookup.bind(router),
+        routing: router2.lookup.bind(router2),
         // router func to find the right handler to call
         route,
         // configure a route in the fastify instance
@@ -28832,7 +28832,7 @@ var require_route = __commonJS({
         closeRoutes: () => {
           closing = true;
         },
-        printRoutes: router.prettyPrint.bind(router),
+        printRoutes: router2.prettyPrint.bind(router2),
         addConstraintStrategy,
         hasConstraintStrategy,
         isAsyncConstraint,
@@ -28840,13 +28840,13 @@ var require_route = __commonJS({
       };
       function addConstraintStrategy(strategy) {
         throwIfAlreadyStarted("Cannot add constraint strategy!");
-        return router.addConstraintStrategy(strategy);
+        return router2.addConstraintStrategy(strategy);
       }
       function hasConstraintStrategy(strategyName) {
-        return router.hasConstraintStrategy(strategyName);
+        return router2.hasConstraintStrategy(strategyName);
       }
       function isAsyncConstraint() {
-        return router.constrainer.asyncStrategiesInUse.size > 0;
+        return router2.constrainer.asyncStrategiesInUse.size > 0;
       }
       function prepareRoute({ method, url, options: options2, handler, isFastify }) {
         if (typeof url !== "string") {
@@ -28876,14 +28876,14 @@ var require_route = __commonJS({
       }
       function hasRoute({ options: options2 }) {
         const normalizedMethod = options2.method?.toUpperCase() ?? "";
-        return router.hasRoute(
+        return router2.hasRoute(
           normalizedMethod,
           options2.url || "",
           options2.constraints
         );
       }
       function findRoute(options2) {
-        const route2 = router.find(
+        const route2 = router2.find(
           options2.method,
           options2.url || "",
           options2.constraints
@@ -29017,10 +29017,10 @@ var require_route = __commonJS({
             server: this,
             isFastify: isFastify2
           });
-          const headHandler = router.findRoute("HEAD", opts.url, constraints);
+          const headHandler = router2.findRoute("HEAD", opts.url, constraints);
           const hasHEADHandler = headHandler !== null;
           try {
-            router.on(opts.method, opts.url, { constraints }, routeHandler, context);
+            router2.on(opts.method, opts.url, { constraints }, routeHandler, context);
           } catch (error) {
             if (!context[kRouteByFastify]) {
               const isDuplicatedRoute = error.message.includes(`Method '${opts.method}' already declared for route`);
@@ -29249,14 +29249,14 @@ var require_fourOhFour = __commonJS({
     var { getGenReqId } = require_reqIdGenFactory();
     function fourOhFour(options) {
       const { logger, disableRequestLogging } = options;
-      const router = FindMyWay({ onBadUrl: createOnBadUrl(), defaultRoute: fourOhFourFallBack });
+      const router2 = FindMyWay({ onBadUrl: createOnBadUrl(), defaultRoute: fourOhFourFallBack });
       let _onBadUrlHandler = null;
-      return { router, setNotFoundHandler, setContext, arrange404 };
+      return { router: router2, setNotFoundHandler, setContext, arrange404 };
       function arrange404(instance) {
         instance[kFourOhFourLevelInstance] = instance;
         instance[kCanSetNotFoundHandler] = true;
-        router.onBadUrl = router.onBadUrl.bind(instance);
-        router.defaultRoute = router.defaultRoute.bind(instance);
+        router2.onBadUrl = router2.onBadUrl.bind(instance);
+        router2.defaultRoute = router2.defaultRoute.bind(instance);
       }
       function basic404(request, reply) {
         const { url, method } = request.raw;
@@ -29351,8 +29351,8 @@ var require_fourOhFour = __commonJS({
           return;
         }
         this[kFourOhFourLevelInstance][kFourOhFourContext] = context;
-        router.all(prefix + (prefix.endsWith("/") ? "*" : "/*"), routeHandler, context);
-        router.all(prefix, routeHandler, context);
+        router2.all(prefix + (prefix.endsWith("/") ? "*" : "/*"), routeHandler, context);
+        router2.all(prefix, routeHandler, context);
       }
       function fourOhFourFallBack(req, res) {
         const fourOhFourContext = this[kFourOhFourLevelInstance][kFourOhFourContext];
@@ -29362,7 +29362,7 @@ var require_fourOhFour = __commonJS({
         const request = new Request(id, null, req, null, childLogger, fourOhFourContext);
         const reply = new Reply(res, request, childLogger);
         request.log.warn("the default handler for 404 did not catch this, this is likely a fastify bug, please report it");
-        request.log.warn(router.prettyPrint());
+        request.log.warn(router2.prettyPrint());
         reply.code(404).send(new FST_ERR_NOT_FOUND());
       }
     }
@@ -32668,11 +32668,11 @@ var require_fastify = __commonJS({
         buildPrettyMeta: defaultBuildPrettyMeta,
         useSemicolonDelimiter: defaultInitOptions.useSemicolonDelimiter
       });
-      const router = buildRouting({
+      const router2 = buildRouting({
         config: options.routerOptions
       });
       const fourOhFour = build404(options);
-      const httpHandler = wrapRouting(router, options);
+      const httpHandler = wrapRouting(router2, options);
       options.http2SessionTimeout = initialConfig.http2SessionTimeout;
       const { server, listen } = createServer(options, httpHandler);
       const serverHasCloseAllConnections = typeof server.closeAllConnections === "function";
@@ -32745,41 +32745,41 @@ var require_fastify = __commonJS({
         routing: httpHandler,
         // routes shorthand methods
         delete: function _delete(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "DELETE", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "DELETE", url, options: options2, handler });
         },
         get: function _get(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "GET", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "GET", url, options: options2, handler });
         },
         head: function _head(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "HEAD", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "HEAD", url, options: options2, handler });
         },
         trace: function _trace(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "TRACE", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "TRACE", url, options: options2, handler });
         },
         patch: function _patch(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "PATCH", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "PATCH", url, options: options2, handler });
         },
         post: function _post(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "POST", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "POST", url, options: options2, handler });
         },
         put: function _put(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "PUT", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "PUT", url, options: options2, handler });
         },
         options: function _options(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: "OPTIONS", url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: "OPTIONS", url, options: options2, handler });
         },
         all: function _all(url, options2, handler) {
-          return router.prepareRoute.call(this, { method: this.supportedMethods, url, options: options2, handler });
+          return router2.prepareRoute.call(this, { method: this.supportedMethods, url, options: options2, handler });
         },
         // extended route
         route: function _route(options2) {
-          return router.route.call(this, { options: options2 });
+          return router2.route.call(this, { options: options2 });
         },
         hasRoute: function _route(options2) {
-          return router.hasRoute.call(this, { options: options2 });
+          return router2.hasRoute.call(this, { options: options2 });
         },
         findRoute: function _findRoute(options2) {
-          return router.findRoute(options2);
+          return router2.findRoute(options2);
         },
         // expose logger instance
         log: logger,
@@ -32844,8 +32844,8 @@ var require_fastify = __commonJS({
         // Set fastify initial configuration options read-only object
         initialConfig,
         // constraint strategies
-        addConstraintStrategy: router.addConstraintStrategy.bind(router),
-        hasConstraintStrategy: router.hasConstraintStrategy.bind(router)
+        addConstraintStrategy: router2.addConstraintStrategy.bind(router2),
+        hasConstraintStrategy: router2.hasConstraintStrategy.bind(router2)
       };
       Object.defineProperties(fastify3, {
         listeningOrigin: {
@@ -32939,7 +32939,7 @@ var require_fastify = __commonJS({
       avvio.once("preReady", () => {
         fastify3.onClose((instance, done) => {
           fastify3[kState].closing = true;
-          router.closeRoutes();
+          router2.closeRoutes();
           hookRunnerApplication("preClose", fastify3[kAvvioBoot], fastify3, function() {
             if (fastify3[kState].listening) {
               if (forceCloseConnections === "idle") {
@@ -32976,7 +32976,7 @@ var require_fastify = __commonJS({
       });
       fastify3.setNotFoundHandler();
       fourOhFour.arrange404(fastify3);
-      router.setup(options, {
+      router2.setup(options, {
         avvio,
         fourOhFour,
         logger,
@@ -33200,7 +33200,7 @@ ${body}`);
       }
       function setNotFoundHandler(opts, handler) {
         throwIfAlreadyStarted('Cannot call "setNotFoundHandler"!');
-        fourOhFour.setNotFoundHandler.call(this, opts, handler, avvio, router.routeHandler);
+        fourOhFour.setNotFoundHandler.call(this, opts, handler, avvio, router2.routeHandler);
         return this;
       }
       function setValidatorCompiler(validatorCompiler) {
@@ -33254,12 +33254,12 @@ ${body}`);
       }
       function printRoutes(opts = {}) {
         opts.includeMeta = opts.includeHooks ? opts.includeMeta ? supportedHooks.concat(opts.includeMeta) : supportedHooks : opts.includeMeta;
-        return router.printRoutes(opts);
+        return router2.printRoutes(opts);
       }
-      function wrapRouting(router2, { rewriteUrl, logger: logger2 }) {
+      function wrapRouting(router3, { rewriteUrl, logger: logger2 }) {
         let isAsync;
         return function preRouting(req, res) {
-          if (isAsync === void 0) isAsync = router2.isAsyncConstraint();
+          if (isAsync === void 0) isAsync = router3.isAsyncConstraint();
           if (rewriteUrl) {
             req.originalUrl = req.url;
             const url = rewriteUrl.call(fastify3, req);
@@ -33270,7 +33270,7 @@ ${body}`);
               req.destroy(err);
             }
           }
-          router2.routing(req, res, buildAsyncConstraintCallback(isAsync, req, res));
+          router3.routing(req, res, buildAsyncConstraintCallback(isAsync, req, res));
         };
       }
       function setGenReqId(func) {
@@ -33292,7 +33292,7 @@ ${body}`);
         const _method = method.toLowerCase();
         if (!this.hasDecorator(_method)) {
           this.decorate(_method, function(url, options2, handler) {
-            return router.prepareRoute.call(this, { method, url, options: options2, handler });
+            return router2.prepareRoute.call(this, { method, url, options: options2, handler });
           });
         }
         return this;
@@ -33895,6 +33895,567 @@ function detectHighThinking(content) {
   return HIGH_THINKING_PHRASES.some((phrase) => lowerContent.includes(phrase.toLowerCase()));
 }
 
+// ../../provider-router.js
+var MIXED_TIERS = ["reasoning", "completion", "value"];
+function normalizeEndpointKind(endpointKind2) {
+  const kind = String(endpointKind2 || "auto").toLowerCase();
+  if (kind === "anthropic" || kind === "anthropic-native") return "anthropic";
+  if (kind === "openai" || kind === "openai-compatible") return "openai";
+  return "auto";
+}
+function normalizeProviderBaseUrl(baseUrl2) {
+  return (baseUrl2 || "").replace(/\/+$/, "").replace(/\/v\d+$/i, "");
+}
+function contextsShareUpstream(a, b) {
+  return Boolean(a && b) && a.providerId === b.providerId && a.baseUrl === b.baseUrl && a.endpointKind === b.endpointKind && a.key === b.key && a.model === b.model;
+}
+function normalizeMixedProviderConfig(input) {
+  const source = { ...input };
+  if (!source.completion && source.coding) {
+    source.completion = source.coding;
+  }
+  delete source.coding;
+  if (source.enabled === false) {
+    return { enabled: false };
+  }
+  const errors = [];
+  const normalized = { enabled: source.enabled !== false };
+  for (const tier of MIXED_TIERS) {
+    const binding = source[tier];
+    if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+      errors.push(`${tier} must be an object`);
+      continue;
+    }
+    const providerId = typeof binding.providerId === "string" ? binding.providerId.trim() : "";
+    const baseUrl2 = typeof binding.baseUrl === "string" ? binding.baseUrl.trim() : "";
+    const model2 = typeof binding.model === "string" ? binding.model.trim() : "";
+    const displayModel = typeof binding.displayModel === "string" ? binding.displayModel.trim() : binding.displayModel;
+    if (!providerId) errors.push(`${tier}.providerId must be a non-empty string`);
+    if (!baseUrl2) errors.push(`${tier}.baseUrl must be a non-empty string`);
+    if (!model2) errors.push(`${tier}.model must be a non-empty string`);
+    if (binding.displayModel !== void 0 && typeof displayModel === "string" && !displayModel) {
+      errors.push(`${tier}.displayModel must be a non-empty string when provided`);
+    }
+    normalized[tier] = {
+      ...binding,
+      providerId,
+      baseUrl: baseUrl2,
+      model: model2,
+      ...displayModel !== void 0 && { displayModel },
+      endpointKind: normalizeEndpointKind(binding.endpointKind)
+    };
+  }
+  return errors.length > 0 ? { errors } : normalized;
+}
+var ProviderContext = class {
+  /**
+   * @param {object} config
+   * @param {string} config.providerId - Provider identifier (e.g., 'glm', 'minimax', 'kimi', 'custom')
+   * @param {string} config.baseUrl - Upstream base URL (e.g., 'https://api.z.ai/api/anthropic')
+   * @param {string} config.key - API key for this provider
+   * @param {string} config.model - Model name at the upstream provider (without namespace prefix)
+   * @param {string} [config.displayModel] - Model name exposed to clients for route lookup
+   * @param {string} config.tier - Which tier this context serves: 'reasoning', 'completion', or 'value'
+   * @param {string} [config.endpointKind] - Override endpoint kind; auto-detected if omitted
+   * @param {Object<string,string>} [config.endpointOverrides] - Optional endpoint kind overrides map
+   */
+  constructor({
+    providerId,
+    baseUrl: baseUrl2,
+    key: key2,
+    model: model2,
+    displayModel,
+    tier,
+    endpointKind: endpointKind2,
+    endpointOverrides = {}
+  }) {
+    this.providerId = providerId;
+    this.baseUrl = normalizeProviderBaseUrl(baseUrl2);
+    this.key = key2;
+    this.model = model2;
+    this.displayModel = typeof displayModel === "string" ? displayModel : null;
+    this.tier = tier;
+    const normalizedEndpointKind = normalizeEndpointKind(endpointKind2);
+    if (normalizedEndpointKind !== "auto") {
+      if (normalizedEndpointKind === "anthropic") {
+        this.endpointKind = ENDPOINT_KIND.ANTHROPIC_NATIVE;
+      } else if (normalizedEndpointKind === "openai") {
+        this.endpointKind = ENDPOINT_KIND.OPENAI_COMPATIBLE;
+      }
+    } else {
+      this.endpointKind = inferEndpointKindSync(providerId, this.baseUrl, endpointOverrides);
+    }
+    if (!this.endpointKind) {
+      throw new Error(`[ProviderContext] Unable to infer endpoint kind for provider "${providerId}"`);
+    }
+  }
+  /**
+   * Whether this provider uses Anthropic-native protocol.
+   * @returns {boolean}
+   */
+  isAnthropicNative() {
+    return this.endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
+  }
+  /**
+   * Build the correct upstream request URL for this provider.
+   * @returns {string} Full URL for the API endpoint
+   */
+  getUpstreamUrl() {
+    if (this.isAnthropicNative()) {
+      return `${this.baseUrl}/v1/messages`;
+    }
+    return `${this.baseUrl}/v1/chat/completions`;
+  }
+  /**
+   * Build the correct authentication and content-type headers for this provider.
+   * @returns {Object<string,string>} Headers object ready for fetch()
+   */
+  getHeaders() {
+    const headers = {
+      "Content-Type": "application/json",
+      ...providerSpecificHeaders(this.providerId)
+    };
+    if (!this.key) {
+      return headers;
+    }
+    if (this.isAnthropicNative()) {
+      headers["x-api-key"] = this.key;
+      headers["anthropic-version"] = process.env.ANTHROPIC_VERSION || "2023-06-01";
+      if (process.env.ANTHROPIC_BETA) {
+        headers["anthropic-beta"] = process.env.ANTHROPIC_BETA;
+      }
+    } else {
+      headers["Authorization"] = `Bearer ${this.key}`;
+    }
+    return headers;
+  }
+  /**
+   * Returns a safe (redacted) representation for logging.
+   * @returns {object}
+   */
+  toDebugObject() {
+    return {
+      providerId: this.providerId,
+      baseUrl: this.baseUrl,
+      model: this.model,
+      displayModel: this.displayModel,
+      tier: this.tier,
+      endpointKind: this.endpointKind,
+      hasKey: !!this.key
+    };
+  }
+};
+var ProviderRouter = class {
+  /**
+   * @param {object} config - Parsed MIXED_PROVIDERS_CONFIG
+   * @param {object} config.reasoning  - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {object} config.completion - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {object} config.value      - { providerId, baseUrl, key, model, endpointKind? }
+   * @param {Object<string,string>} [endpointOverrides={}] - Optional endpoint kind overrides
+   */
+  constructor(config, endpointOverrides = {}) {
+    if (!config || !config.reasoning || !config.completion || !config.value) {
+      throw new Error(
+        "[ProviderRouter] Invalid config: must include reasoning, completion, and value tiers"
+      );
+    }
+    const validation = normalizeMixedProviderConfig(config);
+    if (validation.errors) {
+      throw new Error(`[ProviderRouter] Invalid config: ${validation.errors.join("; ")}`);
+    }
+    this.contexts = {
+      reasoning: new ProviderContext({
+        ...validation.reasoning,
+        tier: "reasoning",
+        endpointOverrides
+      }),
+      completion: new ProviderContext({
+        ...validation.completion,
+        tier: "completion",
+        endpointOverrides
+      }),
+      value: new ProviderContext({
+        ...validation.value,
+        tier: "value",
+        endpointOverrides
+      })
+    };
+    this.tierMap = /* @__PURE__ */ new Map();
+    this.normalizedTierMap = /* @__PURE__ */ new Map();
+    const registerModelName = (modelName, tier, ctx) => {
+      if (!modelName) return;
+      const normalizedModel = modelName.toLowerCase();
+      const existing = this.normalizedTierMap.get(normalizedModel);
+      if (existing) {
+        if (contextsShareUpstream(existing.context, ctx)) {
+          return;
+        }
+        throw new Error(
+          `[ProviderRouter] Model "${modelName}" is assigned to multiple mixed-provider tiers (${existing.tier}, ${tier})`
+        );
+      }
+      const entry = { tier, context: ctx };
+      this.tierMap.set(modelName, entry);
+      this.normalizedTierMap.set(normalizedModel, entry);
+    };
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      registerModelName(ctx.model, tier, ctx);
+      registerModelName(ctx.displayModel, tier, ctx);
+    }
+  }
+  /**
+   * Given a model name from an incoming request, resolve which ProviderContext to use.
+   *
+   * @param {string} modelName - The model name from payload.model
+   * @returns {{ tier: string, context: ProviderContext } | null} Resolved context, or null if not found
+   */
+  resolve(modelName) {
+    if (!modelName) return null;
+    const exact = this.tierMap.get(modelName);
+    if (exact) return exact;
+    return this.normalizedTierMap.get(modelName.toLowerCase()) || null;
+  }
+  /**
+   * Get the ProviderContext for a specific tier directly.
+   *
+   * @param {'reasoning' | 'completion' | 'value'} tier
+   * @returns {ProviderContext}
+   */
+  getContextForTier(tier) {
+    return this.contexts[tier] || null;
+  }
+  /**
+   * Smart key validation: every routed context must carry the key it will use.
+   *
+   * @returns {{ valid: boolean, missing: string[], uniqueProviders: string[] }}
+   */
+  validate() {
+    const uniqueProviders = /* @__PURE__ */ new Set();
+    const missing = [];
+    for (const [tier, ctx] of Object.entries(this.contexts)) {
+      uniqueProviders.add(ctx.providerId);
+      if (!ctx.key) {
+        missing.push(`${tier}:${ctx.providerId}`);
+      }
+    }
+    return {
+      valid: missing.length === 0,
+      missing,
+      uniqueProviders: [...uniqueProviders]
+    };
+  }
+  /**
+   * Returns a safe (redacted) representation of the full router state for logging.
+   * @returns {object}
+   */
+  toDebugObject() {
+    return {
+      reasoning: this.contexts.reasoning.toDebugObject(),
+      completion: this.contexts.completion.toDebugObject(),
+      value: this.contexts.value.toDebugObject(),
+      tierMapSize: this.tierMap.size,
+      models: [...this.tierMap.keys()]
+    };
+  }
+};
+function createRouterFromEnv(env = process.env, endpointOverrides = {}) {
+  const raw = env.MIXED_PROVIDERS_CONFIG;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const config = normalizeMixedProviderConfig(parsed);
+    if (config.enabled === false) {
+      console.log("[ProviderRouter] Mixed provider config disabled; using single-provider mode");
+      return null;
+    }
+    if (config.errors) {
+      throw new Error(
+        `[ProviderRouter] Invalid MIXED_PROVIDERS_CONFIG: ${config.errors.join("; ")}`
+      );
+    }
+    const router2 = new ProviderRouter(config, endpointOverrides);
+    const validation = router2.validate();
+    if (!validation.valid) {
+      throw new Error(
+        `[ProviderRouter] Missing API keys for mixed-provider tiers: ${validation.missing.join(", ")}`
+      );
+    }
+    if (env.DEBUG || env.debug) {
+      console.log("[ProviderRouter] Initialized:", JSON.stringify(router2.toDebugObject(), null, 2));
+    } else {
+      console.log(
+        `[ProviderRouter] Mixed mode active: ${validation.uniqueProviders.length} unique providers, models: [${[...router2.tierMap.keys()].join(", ")}]`
+      );
+    }
+    return router2;
+  } catch (err) {
+    throw new Error(`[ProviderRouter] Failed to initialize MIXED_PROVIDERS_CONFIG: ${err.message}`);
+  }
+}
+
+// ../../transformers.js
+var TransformerRegistry = class {
+  constructor() {
+    this.transformers = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Register a transformer by name
+   * @param {string} name - Transformer name
+   * @param {object} transformer - Object with transform/reverseTransform functions
+   */
+  register(name, transformer) {
+    if (!transformer.transform || typeof transformer.transform !== "function") {
+      throw new Error(`Transformer ${name} must export a transform function`);
+    }
+    if (!transformer.reverseTransform || typeof transformer.reverseTransform !== "function") {
+      throw new Error(`Transformer ${name} must export a reverseTransform function`);
+    }
+    this.transformers.set(name, transformer);
+  }
+  /**
+   * Get a transformer by name
+   * @param {string} name - Transformer name
+   * @returns {object|null} Transformer object or null if not found
+   */
+  get(name) {
+    return this.transformers.get(name) || null;
+  }
+  /**
+   * Check if a transformer is registered
+   * @param {string} name - Transformer name
+   * @returns {boolean}
+   */
+  has(name) {
+    return this.transformers.has(name);
+  }
+};
+async function applyTransformers(transformerConfigs, data, registry) {
+  let result = data;
+  for (const config of transformerConfigs) {
+    const [name, options] = Array.isArray(config) ? config : [config, {}];
+    const transformer = registry.get(name);
+    if (!transformer) {
+      console.error(`[Transformer] Transformer '${name}' not found in registry, skipping`);
+      continue;
+    }
+    try {
+      result = await transformer.transform(result, options);
+    } catch (error) {
+      console.error(`[Transformer] Error in ${name}.transform():`, error);
+    }
+  }
+  return result;
+}
+async function applyReverseTransformers(transformerConfigs, data, registry) {
+  let result = data;
+  for (let i = transformerConfigs.length - 1; i >= 0; i--) {
+    const config = transformerConfigs[i];
+    const [name, options] = Array.isArray(config) ? config : [config, {}];
+    const transformer = registry.get(name);
+    if (!transformer) {
+      console.error(`[Transformer] Transformer '${name}' not found in registry, skipping`);
+      continue;
+    }
+    try {
+      result = await transformer.reverseTransform(result, options);
+    } catch (error) {
+      console.error(`[Transformer] Error in ${name}.reverseTransform():`, error);
+    }
+  }
+  return result;
+}
+
+// ../../transformers/tooluse.js
+async function transform(request, options = {}) {
+  if (request.tools && Array.isArray(request.tools) && request.tools.length > 0) {
+    if (!request.tool_choice) {
+      request.tool_choice = { type: "auto" };
+    }
+  }
+  return request;
+}
+async function reverseTransform(response, options = {}) {
+  return response;
+}
+var tooluse_default = {
+  transform,
+  reverseTransform
+};
+
+// ../../transformers/reasoning.js
+async function transform2(request, options = {}) {
+  return request;
+}
+async function reverseTransform2(response, options = {}) {
+  if (response.type === "content_block_delta") {
+    if (response.delta?.reasoning) {
+      const { reasoning, ...restDelta } = response.delta;
+      return {
+        type: "content_block_delta",
+        index: response.index,
+        delta: {
+          ...restDelta,
+          type: "thinking_delta",
+          thinking: reasoning
+        }
+      };
+    }
+    if (response.delta?.reasoning_content) {
+      const { reasoning_content, ...restDelta } = response.delta;
+      return {
+        type: "content_block_delta",
+        index: response.index,
+        delta: {
+          ...restDelta,
+          type: "thinking_delta",
+          thinking: reasoning_content
+        }
+      };
+    }
+  }
+  if (response.type === "content_block_start") {
+    if (response.content_block?.reasoning) {
+      const { reasoning, ...restBlock } = response.content_block;
+      return {
+        type: "content_block_start",
+        index: response.index,
+        content_block: {
+          ...restBlock,
+          type: "thinking",
+          thinking: reasoning
+        }
+      };
+    }
+    if (response.content_block?.reasoning_content) {
+      const { reasoning_content, ...restBlock } = response.content_block;
+      return {
+        type: "content_block_start",
+        index: response.index,
+        content_block: {
+          ...restBlock,
+          type: "thinking",
+          thinking: reasoning_content
+        }
+      };
+    }
+  }
+  if (response.content && Array.isArray(response.content)) {
+    response.content = response.content.map((block) => {
+      if (block.reasoning) {
+        const { reasoning, ...rest } = block;
+        return {
+          ...rest,
+          type: "thinking",
+          thinking: reasoning
+        };
+      }
+      if (block.reasoning_content) {
+        const { reasoning_content, ...rest } = block;
+        return {
+          ...rest,
+          type: "thinking",
+          thinking: reasoning_content
+        };
+      }
+      return block;
+    });
+  }
+  return response;
+}
+var reasoning_default = {
+  transform: transform2,
+  reverseTransform: reverseTransform2
+};
+
+// ../../transformers/maxtoken.js
+async function transform3(request, options = {}) {
+  const configuredMaxTokens = options.max_tokens;
+  if (configuredMaxTokens) {
+    if (!request.max_tokens) {
+      request.max_tokens = configuredMaxTokens;
+    } else {
+      if (request.max_tokens > configuredMaxTokens) {
+        request.max_tokens = configuredMaxTokens;
+      }
+    }
+  }
+  return request;
+}
+async function reverseTransform3(response, options = {}) {
+  return response;
+}
+var maxtoken_default = {
+  transform: transform3,
+  reverseTransform: reverseTransform3
+};
+
+// ../../transformers/enhancetool.js
+async function transform4(request, options = {}) {
+  if (request.tools && Array.isArray(request.tools)) {
+    request.tools = request.tools.map((tool) => {
+      if (!tool.input_schema) {
+        tool.input_schema = {
+          type: "object",
+          properties: {},
+          required: []
+        };
+      }
+      if (!tool.input_schema.properties) {
+        tool.input_schema.properties = {};
+      }
+      if (!Array.isArray(tool.input_schema.required)) {
+        tool.input_schema.required = [];
+      }
+      return tool;
+    });
+  }
+  return request;
+}
+async function reverseTransform4(response, options = {}) {
+  if (response.type === "content_block_delta" && response.delta?.type === "input_json_delta") {
+    return response;
+  }
+  if (response.type === "tool_use" && response.input) {
+    try {
+      if (typeof response.input === "string") {
+        response.input = JSON.parse(response.input);
+      }
+      if (typeof response.input !== "object" || response.input === null) {
+        console.error("[Transformer:enhancetool] Invalid tool input, using empty object:", response.input);
+        response.input = {};
+      }
+    } catch (error) {
+      console.error("[Transformer:enhancetool] Failed to parse tool input:", error);
+      response.input = {};
+    }
+    return response;
+  }
+  if (response.content && Array.isArray(response.content)) {
+    response.content = response.content.map((block) => {
+      if (block.type === "tool_use" && block.input) {
+        try {
+          if (typeof block.input === "string") {
+            block.input = JSON.parse(block.input);
+          }
+          if (typeof block.input !== "object" || block.input === null) {
+            console.error("[Transformer:enhancetool] Invalid tool input, using empty object:", block.input);
+            block.input = {};
+          }
+        } catch (error) {
+          console.error("[Transformer:enhancetool] Failed to parse tool input:", error);
+          block.input = {};
+        }
+      }
+      return block;
+    });
+  }
+  return response;
+}
+var enhancetool_default = {
+  transform: transform4,
+  reverseTransform: reverseTransform4
+};
+
 // ../../index.js
 var import_meta = {};
 var packageVersion = "0.0.0";
@@ -33959,7 +34520,13 @@ var models = {
 };
 var ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || "2023-06-01";
 var ANTHROPIC_BETA = process.env.ANTHROPIC_BETA;
-var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY, XAI_API_KEY";
+var KEY_ENV_HINT = "CUSTOM_API_KEY, API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, ZAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, GROK_API_KEY, XAI_API_KEY";
+var router = createRouterFromEnv(process.env, endpointKindOverrides);
+var transformerRegistry = new TransformerRegistry();
+transformerRegistry.register("tooluse", tooluse_default);
+transformerRegistry.register("reasoning", reasoning_default);
+transformerRegistry.register("maxtoken", maxtoken_default);
+transformerRegistry.register("enhancetool", enhancetool_default);
 var FALLBACK_XML_MODELS = [
   "inclusionai/ling-1t",
   "z-ai/glm-4.6",
@@ -33968,6 +34535,7 @@ var FALLBACK_XML_MODELS = [
   "deepseek-v3"
 ];
 var escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS = ["openai", "anthropic", "openrouter", "glm", "deepseek"];
 function matchesPattern(modelName, pattern) {
   if (typeof pattern !== "string" || !pattern) return false;
   const value = modelName.toLowerCase();
@@ -34039,6 +34607,25 @@ function getModelToolStyle(modelName, providerId) {
   }
   return null;
 }
+function getModelTransformers(modelName, providerId) {
+  if (!modelName || !providerId) return [];
+  const config = modelCapabilities?.transformers || null;
+  if (!config) return [];
+  const providerConfig = config[providerId] || {};
+  const fallbackProviderConfigs = providerId === "custom" ? Object.entries(config).filter(([key2]) => CUSTOM_TRANSFORMER_FALLBACK_PROVIDERS.includes(key2)).flatMap(([, value]) => Object.entries(value || {})) : [];
+  const entries = [
+    ...Object.entries(config["*"] || {}),
+    ...fallbackProviderConfigs,
+    ...Object.entries(providerConfig)
+  ];
+  const matched = [];
+  for (const [pattern, transformerConfigs] of entries) {
+    if (matchesPattern(modelName, pattern) && Array.isArray(transformerConfigs)) {
+      matched.push(...transformerConfigs);
+    }
+  }
+  return matched;
+}
 function parseNativeToolResponse(openaiMessage, options = {}) {
   const blocks = [];
   const warnings = Array.isArray(options.warnings) ? options.warnings : null;
@@ -34084,7 +34671,10 @@ console.log(`[Startup] - Completion Model: ${models.completion}`);
 console.log(`[Startup] - API Key: ${key ? "present" : "MISSING"}`);
 console.log(`[Startup] - API Key Source: ${keySource || "none"}`);
 console.log(`[Startup] - Debug Mode: ${process.env.DEBUG ? "enabled" : "disabled"}`);
-if (models.reasoning !== models.completion) {
+if (router) {
+  console.log("[Startup] - Mixed-provider mode: ACTIVE");
+  console.log(`[Startup] - Router: ${JSON.stringify(router.toDebugObject())}`);
+} else if (models.reasoning !== models.completion) {
   console.log("[Startup] - Two-model mode detected");
 } else {
   console.log("[Startup] - Single-model mode");
@@ -34169,7 +34759,9 @@ function buildUpstreamHeaders({ provider: providerId, endpointKind: upstreamKind
   if (!apiKey) {
     return headers;
   }
-  if (upstreamKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+  const normalizedKind = String(upstreamKind || "").toLowerCase();
+  const isAnthropicNative = normalizedKind === ENDPOINT_KIND.ANTHROPIC_NATIVE || normalizedKind === "anthropic" || normalizedKind === "anthropic-native";
+  if (isAnthropicNative) {
     headers["x-api-key"] = apiKey;
     headers["anthropic-version"] = ANTHROPIC_VERSION;
     if (ANTHROPIC_BETA) {
@@ -34244,7 +34836,9 @@ fastify.get("/v1/models", async (request, reply) => {
   }
 });
 async function healthCheckHandler(request, reply) {
-  const isReady = !!key;
+  const routerValidation = router ? router.validate() : null;
+  const routerReady = Boolean(routerValidation?.valid);
+  const isReady = Boolean(key || routerReady);
   const status = isReady ? "ok" : "unhealthy";
   if (!isReady) {
     reply.code(503);
@@ -34275,11 +34869,14 @@ async function healthCheckHandler(request, reply) {
       currentCompletion: models.completion || "not set"
     },
     timestamp: Date.now(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    mixedProviders: router ? router.toDebugObject() : null,
+    readinessSource: key ? "single-provider-key" : routerReady ? "mixed-provider-router" : "missing-key"
   };
   if (!isReady) {
     healthResponse.missingKey = true;
     healthResponse.keySourcesTried = KEY_ENV_HINT;
+    if (routerValidation && !routerValidation.valid) healthResponse.missingMixedProviderKeys = routerValidation.missing;
     healthResponse.endpointKind = endpointKind;
     if (baseUrl) healthResponse.baseUrl = baseUrl;
     if (process.env.FORCE_PROVIDER) healthResponse.forcedProvider = process.env.FORCE_PROVIDER;
@@ -34472,33 +35069,64 @@ fastify.post("/v1/messages", async (request, reply) => {
     const requestStartMs = Date.now();
     let firstChunkLogged = false;
     let ttfbMs = null;
-    const negotiationError = await ensureEndpointKindReady();
-    if (negotiationError) {
-      reply.code(negotiationError.statusCode);
-      return negotiationError.body;
+    let routedContext = null;
+    if (router && payload.model) {
+      const resolved = router.resolve(payload.model);
+      if (resolved) {
+        routedContext = resolved.context;
+        console.log(`[Mixed Router] Model "${payload.model}" \u2192 tier "${resolved.tier}" \u2192 provider "${routedContext.providerId}" (${routedContext.endpointKind})`);
+      } else {
+        reply.code(400);
+        return {
+          error: {
+            type: "invalid_model",
+            message: `Model "${payload.model}" is not configured in MIXED_PROVIDERS_CONFIG`
+          }
+        };
+      }
     }
-    const isAnthropicNative = endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE;
-    if (!key) {
+    const effectiveProvider = routedContext?.providerId || provider;
+    const effectiveBaseUrl = routedContext?.baseUrl || normalizedBaseUrl;
+    const effectiveKey = routedContext?.key || key;
+    if (!routedContext) {
+      const negotiationError = await ensureEndpointKindReady();
+      if (negotiationError) {
+        reply.code(negotiationError.statusCode);
+        return negotiationError.body;
+      }
+    }
+    const effectiveEndpointKind = routedContext?.endpointKind || endpointKind;
+    const normalizedEffectiveEndpointKind = String(effectiveEndpointKind || "").toLowerCase();
+    const isAnthropicNative = normalizedEffectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE || normalizedEffectiveEndpointKind === "anthropic" || normalizedEffectiveEndpointKind === "anthropic-native";
+    if (!effectiveKey) {
       reply.code(400);
-      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${provider === "deepseek" ? "Deepseek" : provider === "glm" ? "GLM" : provider} API Key) or set the correct env var (${provider === "deepseek" ? "DEEPSEEK_API_KEY" : provider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : "API_KEY"}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${provider === "openrouter" ? "OpenRouter" : provider} API key in the extension settings.`;
+      const providerEnvHint = effectiveProvider === "deepseek" ? "DEEPSEEK_API_KEY" : effectiveProvider === "glm" ? "ZAI_API_KEY or GLM_API_KEY" : effectiveProvider === "kimi" ? "KIMI_API_KEY" : effectiveProvider === "minimax" ? "MINIMAX_API_KEY" : "API_KEY";
+      const hint = isAnthropicNative ? `Store the provider API key in the extension (Thronekeeper: Store ${effectiveProvider === "deepseek" ? "Deepseek" : effectiveProvider === "glm" ? "GLM" : effectiveProvider} API Key) or set the correct env var (${providerEnvHint}), and confirm the provider switch in settings.` : `Use Authorization: Bearer <token> header or configure ${effectiveProvider === "openrouter" ? "OpenRouter" : effectiveProvider} API key in the extension settings.`;
       return {
         error: {
-          message: `No API key found for provider "${provider}". Checked ${KEY_ENV_HINT}.`,
+          message: `No API key found for provider "${effectiveProvider}". Checked ${KEY_ENV_HINT}.`,
           type: "missing_api_key",
           hint
         }
       };
     }
-    const requestUrl = isAnthropicNative ? `${normalizedBaseUrl}/v1/messages` : `${normalizedBaseUrl}/v1/chat/completions`;
-    const headers = buildUpstreamHeaders({ provider, endpointKind, key });
+    const requestUrl = isAnthropicNative ? `${effectiveBaseUrl}/v1/messages` : `${effectiveBaseUrl}/v1/chat/completions`;
+    const headers = buildUpstreamHeaders({
+      provider: effectiveProvider,
+      endpointKind: effectiveEndpointKind,
+      key: effectiveKey
+    });
     if (isAnthropicNative) {
-      console.log(`[Anthropic Native] Handling request for provider: ${provider}`);
+      console.log(`[Anthropic Native] Handling request for provider: ${effectiveProvider}`);
       console.log(`[Anthropic Native] Forwarding to: ${requestUrl}`);
       console.log(`[Anthropic Native] Authentication: x-api-key header injected`);
     }
     console.log(`[Request] Starting request to ${requestUrl}`);
     if (isAnthropicNative) {
-      const anthropicPayload = buildAnthropicPayload(payload);
+      const anthropicPayload = buildAnthropicPayload({
+        ...payload,
+        model: routedContext?.model || payload.model
+      });
       const upstreamResponse = await fetch(requestUrl, {
         method: "POST",
         headers,
@@ -34521,7 +35149,7 @@ fastify.post("/v1/messages", async (request, reply) => {
         }
         console.error("[Anthropic Error]", {
           status: upstreamResponse.status,
-          provider,
+          effectiveProvider,
           messageCount: Array.isArray(payload?.messages) ? payload.messages.length : 0,
           error: errorJson.error?.message?.slice?.(0, 200) || errorDetails.slice(0, 200)
         });
@@ -34626,7 +35254,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       }
       return;
     }
-    if (endpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
+    if (effectiveEndpointKind === ENDPOINT_KIND.ANTHROPIC_NATIVE) {
       console.error("[Guard Violation] Anthropic-native endpoint reached OpenAI conversion path - this should not happen");
       reply.code(500);
       return { error: { message: "Internal error: endpoint kind mismatch", type: "internal_error" } };
@@ -34684,8 +35312,13 @@ fastify.post("/v1/messages", async (request, reply) => {
       }
     }));
     const responseWarnings = [];
-    const selectedModel = payload.model || (payload.thinking ? models.reasoning : models.completion);
-    const toolStyle = getModelToolStyle(selectedModel, provider);
+    const selectedModel = routedContext?.model || payload.model || (payload.thinking ? models.reasoning : models.completion);
+    const toolStyle = getModelToolStyle(selectedModel, effectiveProvider);
+    const transformerConfigs = getModelTransformers(selectedModel, effectiveProvider);
+    const hasTooluseTransformer = transformerConfigs.some((config) => {
+      const name = Array.isArray(config) ? config[0] : config;
+      return name === "tooluse";
+    });
     const preferJsonTools = toolStyle === "json";
     if (toolStyle) {
       console.log(`[Tool Style] ${selectedModel} matched toolStyle=${toolStyle}`);
@@ -34706,15 +35339,15 @@ fastify.post("/v1/messages", async (request, reply) => {
     } else {
       console.log(`[Model] Using requested model: ${selectedModel}`);
     }
-    const supportsToolCalling = modelSupportsToolCalling(selectedModel, provider);
+    const supportsToolCalling = modelSupportsToolCalling(selectedModel, effectiveProvider);
     let shouldDropTools = false;
-    if (provider === "openrouter" && tools.length > 0 && !supportsToolCalling) {
+    if (effectiveProvider === "openrouter" && tools.length > 0 && !supportsToolCalling) {
       console.warn(`[Tool Capability] Model ${selectedModel} does not support tool calling. Stripping tools and tool_choice.`);
       shouldDropTools = true;
       responseWarnings.push(`Tool calling is unavailable for ${selectedModel}; the proxy converted available tools into plain instructions.`);
     }
     const enableJsonTools = !shouldDropTools && preferJsonTools && tools.length > 0;
-    const needsXMLTools = !shouldDropTools && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, provider);
+    const needsXMLTools = !shouldDropTools && !hasTooluseTransformer && !enableJsonTools && tools.length > 0 && modelNeedsXMLTools(selectedModel, effectiveProvider);
     const messagesWithXML = needsXMLTools ? injectXMLToolInstructions(messages, tools) : messages;
     const openaiPayload = {
       model: selectedModel,
@@ -34726,7 +35359,7 @@ fastify.post("/v1/messages", async (request, reply) => {
     if (!shouldDropTools && !needsXMLTools && tools.length > 0) {
       openaiPayload.tools = tools;
       if (payload.tool_choice) {
-        if (provider === "openrouter" && typeof payload.tool_choice === "object" && payload.tool_choice.type === "auto") {
+        if (effectiveProvider === "openrouter" && typeof payload.tool_choice === "object" && payload.tool_choice.type === "auto") {
           openaiPayload.tool_choice = "auto";
         } else {
           openaiPayload.tool_choice = payload.tool_choice;
@@ -34735,7 +35368,7 @@ fastify.post("/v1/messages", async (request, reply) => {
       if (enableJsonTools) {
         openaiPayload.parallel_tool_calls = false;
         if (!openaiPayload.tool_choice) {
-          openaiPayload.tool_choice = provider === "openrouter" ? "auto" : { type: "auto" };
+          openaiPayload.tool_choice = effectiveProvider === "openrouter" ? "auto" : { type: "auto" };
         }
       }
     } else if (shouldDropTools && tools.length > 0) {
@@ -34751,7 +35384,7 @@ ${toolInstructions}`;
       openaiPayload.messages = messagesWithXML;
       console.log(`[Tool Capability] Injected text-based tool instructions for ${selectedModel}`);
     }
-    if (provider === "grok") {
+    if (effectiveProvider === "grok") {
       let agentCount = GROK_AGENT_COUNTS.low;
       if (payload.thinking === true) {
         agentCount = GROK_AGENT_COUNTS.high;
@@ -34772,7 +35405,8 @@ ${toolInstructions}`;
         agent_count: agentCount
       };
     }
-    debug("OpenAI payload:", openaiPayload);
+    const transformedOpenaiPayload = transformerConfigs.length > 0 ? await applyTransformers(transformerConfigs, openaiPayload, transformerRegistry) : openaiPayload;
+    debug("OpenAI payload:", transformedOpenaiPayload);
     if (tools.length > 0) {
       if (needsXMLTools) {
         console.log(`[Tool Mode] XML tool calling enabled for ${selectedModel}`);
@@ -34796,7 +35430,7 @@ ${toolInstructions}`;
     const openaiResponse = await fetch(requestUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify(openaiPayload)
+      body: JSON.stringify(transformedOpenaiPayload)
     });
     const elapsedMs = Date.now() - requestStartMs;
     console.log(`[Timing] Response received in ${elapsedMs}ms (HTTP ${openaiResponse.status})`);
@@ -34855,7 +35489,7 @@ ${toolInstructions}`;
       console.error("[OpenRouter Error]", {
         status: openaiResponse.status,
         model: "[REDACTED]",
-        provider,
+        effectiveProvider,
         messageCount: messages.length,
         toolCount: tools.length,
         error: errorJson.error?.message || errorDetails.substring(0, 200)
@@ -34899,7 +35533,7 @@ ${toolInstructions}`;
       }
       const choice = data.choices[0];
       const openaiMessage = choice.message;
-      if (provider === "grok" && selectedModel.includes("multi-agent")) {
+      if (effectiveProvider === "grok" && selectedModel.includes("multi-agent")) {
         openaiMessage.content = stripPgpBlocks(openaiMessage.content);
       }
       const stopReason = mapStopReason(choice.finish_reason);
@@ -34916,6 +35550,16 @@ ${toolInstructions}`;
           type: "text",
           text: openaiMessage.content || ""
         }];
+      }
+      if (transformerConfigs.length > 0) {
+        const transformedResponse = await applyReverseTransformers(
+          transformerConfigs,
+          { content: contentBlocks },
+          transformerRegistry
+        );
+        if (Array.isArray(transformedResponse.content)) {
+          contentBlocks = transformedResponse.content;
+        }
       }
       if (!contentBlocks || contentBlocks.length === 0) {
         contentBlocks = [{
@@ -34964,12 +35608,28 @@ ${toolInstructions}`;
     let fullContent = "";
     let usage = null;
     let textBlockStarted = false;
+    let thinkingBlockStarted = false;
+    let textBlockIndex = 0;
+    let thinkingBlockIndex = 0;
+    let nextContentBlockIndex = 0;
     let encounteredToolCall = false;
     const toolCallAccumulators = {};
+    const toolCallIndexMap = /* @__PURE__ */ new Map();
     let chunkBuffer = "";
     const decoder = new import_util.TextDecoder("utf-8");
     const reader = openaiResponse.body.getReader();
     let done = false;
+    const sendContentSSE = async (event, payload2) => {
+      let eventPayload = payload2;
+      if (transformerConfigs.length > 0) {
+        eventPayload = await applyReverseTransformers(
+          transformerConfigs,
+          eventPayload,
+          transformerRegistry
+        );
+      }
+      sendSSE(reply, event, eventPayload);
+    };
     try {
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -34996,9 +35656,9 @@ ${toolInstructions}`;
                   if (finalParsed.choices?.[0]?.delta?.content) {
                     accumulatedContent += finalParsed.choices[0].delta.content;
                     if (textBlockStarted) {
-                      sendSSE(reply, "content_block_delta", {
+                      await sendContentSSE("content_block_delta", {
                         type: "content_block_delta",
-                        index: 0,
+                        index: textBlockIndex,
                         delta: {
                           type: "text_delta",
                           text: finalParsed.choices[0].delta.content
@@ -35011,7 +35671,7 @@ ${toolInstructions}`;
                 }
                 chunkBuffer = "";
               }
-              if (provider === "grok" && selectedModel.includes("multi-agent")) {
+              if (effectiveProvider === "grok" && selectedModel.includes("multi-agent")) {
                 accumulatedContent = stripPgpBlocks(accumulatedContent);
               }
               const trimmedContent = accumulatedContent.trim();
@@ -35020,18 +35680,19 @@ ${toolInstructions}`;
                 const fallbackText = trimmedReasoning ? "Model returned only reasoning without a final answer. Consider selecting a different OpenRouter model or disabling tool usage." : "Model response was empty.";
                 if (!textBlockStarted) {
                   textBlockStarted = true;
-                  sendSSE(reply, "content_block_start", {
+                  textBlockIndex = nextContentBlockIndex++;
+                  await sendContentSSE("content_block_start", {
                     type: "content_block_start",
-                    index: 0,
+                    index: textBlockIndex,
                     content_block: {
                       type: "text",
                       text: ""
                     }
                   });
                 }
-                sendSSE(reply, "content_block_delta", {
+                await sendContentSSE("content_block_delta", {
                   type: "content_block_delta",
-                  index: 0,
+                  index: textBlockIndex,
                   delta: {
                     type: "text_delta",
                     text: fallbackText
@@ -35046,18 +35707,25 @@ ${toolInstructions}`;
                 totalResponseTime: totalStreamMs,
                 serverProcessingMs: ttfbMs ? ttfbMs - elapsedMs : null
               });
+              if (thinkingBlockStarted) {
+                sendSSE(reply, "content_block_stop", {
+                  type: "content_block_stop",
+                  index: thinkingBlockIndex
+                });
+              }
+              if (textBlockStarted) {
+                sendSSE(reply, "content_block_stop", {
+                  type: "content_block_stop",
+                  index: textBlockIndex
+                });
+              }
               if (encounteredToolCall) {
-                for (const idx in toolCallAccumulators) {
+                for (const idx of Object.keys(toolCallAccumulators)) {
                   sendSSE(reply, "content_block_stop", {
                     type: "content_block_stop",
                     index: parseInt(idx, 10)
                   });
                 }
-              } else if (textBlockStarted) {
-                sendSSE(reply, "content_block_stop", {
-                  type: "content_block_stop",
-                  index: 0
-                });
               }
               sendSSE(reply, "message_delta", {
                 type: "message_delta",
@@ -35101,10 +35769,14 @@ ${toolInstructions}`;
             if (delta && delta.tool_calls) {
               for (const toolCall of delta.tool_calls) {
                 encounteredToolCall = true;
-                const idx = toolCall.index;
+                const upstreamToolIndex = String(toolCall.index ?? 0);
+                if (!toolCallIndexMap.has(upstreamToolIndex)) {
+                  toolCallIndexMap.set(upstreamToolIndex, nextContentBlockIndex++);
+                }
+                const idx = toolCallIndexMap.get(upstreamToolIndex);
                 if (toolCallAccumulators[idx] === void 0) {
                   toolCallAccumulators[idx] = "";
-                  sendSSE(reply, "content_block_start", {
+                  await sendContentSSE("content_block_start", {
                     type: "content_block_start",
                     index: idx,
                     content_block: {
@@ -35119,7 +35791,7 @@ ${toolInstructions}`;
                 const oldArgs = toolCallAccumulators[idx];
                 if (newArgs.length > oldArgs.length) {
                   const deltaText = newArgs.substring(oldArgs.length);
-                  sendSSE(reply, "content_block_delta", {
+                  await sendContentSSE("content_block_delta", {
                     type: "content_block_delta",
                     index: idx,
                     delta: {
@@ -35135,42 +35807,45 @@ ${toolInstructions}`;
               fullContent += delta.content;
               if (!textBlockStarted) {
                 textBlockStarted = true;
-                sendSSE(reply, "content_block_start", {
+                textBlockIndex = nextContentBlockIndex++;
+                await sendContentSSE("content_block_start", {
                   type: "content_block_start",
-                  index: 0,
+                  index: textBlockIndex,
                   content_block: {
                     type: "text",
                     text: ""
                   }
                 });
               }
-              sendSSE(reply, "content_block_delta", {
+              await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
-                index: 0,
+                index: textBlockIndex,
                 delta: {
                   type: "text_delta",
                   text: delta.content
                 }
               });
-            } else if (delta && delta.reasoning) {
-              if (!textBlockStarted) {
-                textBlockStarted = true;
-                sendSSE(reply, "content_block_start", {
+            } else if (delta && (delta.reasoning || delta.reasoning_content)) {
+              if (!thinkingBlockStarted) {
+                thinkingBlockStarted = true;
+                thinkingBlockIndex = nextContentBlockIndex++;
+                await sendContentSSE("content_block_start", {
                   type: "content_block_start",
-                  index: 0,
+                  index: thinkingBlockIndex,
                   content_block: {
-                    type: "text",
-                    text: ""
+                    type: "thinking",
+                    thinking: ""
                   }
                 });
               }
-              accumulatedReasoning += delta.reasoning;
-              sendSSE(reply, "content_block_delta", {
+              const reasoningText = delta.reasoning || delta.reasoning_content;
+              accumulatedReasoning += reasoningText;
+              await sendContentSSE("content_block_delta", {
                 type: "content_block_delta",
-                index: 0,
+                index: thinkingBlockIndex,
                 delta: {
                   type: "thinking_delta",
-                  thinking: delta.reasoning
+                  thinking: reasoningText
                 }
               });
             }

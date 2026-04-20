@@ -33,7 +33,7 @@ const PROVIDER_KEY_SOURCES = {
   [PROVIDERS.glm]: ['GLM_API_KEY', 'ZAI_API_KEY'], // Comment 2: Support both names for backward compatibility
   [PROVIDERS.anthropic]: ['ANTHROPIC_API_KEY'],
   [PROVIDERS.grok]: ['GROK_API_KEY', 'XAI_API_KEY'],
-  [PROVIDERS.kimi]: ['ANTHROPIC_API_KEY'],
+  [PROVIDERS.kimi]: ['KIMI_API_KEY'],
   [PROVIDERS.minimax]: ['MINIMAX_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
 }
 
@@ -353,6 +353,63 @@ export function providerSpecificHeaders(provider, env = process.env) {
     if (referer) headers['HTTP-Referer'] = referer
     if (title) headers['X-Title'] = title
   }
+  return headers
+}
+
+/**
+ * Resolve the API key for an explicit provider ID.
+ * Unlike resolveApiKey(), this accepts the key directly (for mixed-provider mode
+ * where keys are passed via MIXED_PROVIDERS_CONFIG, not env vars).
+ *
+ * @param {string} providerId - Provider identifier
+ * @param {string|null} explicitKey - Key passed directly (takes priority)
+ * @param {Object} [env=process.env] - Fallback environment
+ * @returns {{key: string|null, source: string|null}}
+ */
+export function resolveApiKeyForProvider(providerId, explicitKey = null, env = process.env) {
+  if (explicitKey) {
+    return { key: explicitKey, source: 'mixed-providers-config' }
+  }
+  return resolveApiKey(providerId, env)
+}
+
+/**
+ * Build upstream headers from a ProviderContext-like object.
+ * Accepts an explicit context instead of reading from global state.
+ *
+ * @param {object} ctx - Provider context with { providerId, endpointKind, key }
+ * @param {string} ctx.providerId - Provider identifier
+ * @param {string} ctx.endpointKind - ENDPOINT_KIND value
+ * @param {string|null} ctx.key - API key
+ * @param {Object} [env=process.env] - Environment for provider-specific headers
+ * @returns {Object<string,string>} Headers object
+ */
+export function buildUpstreamHeadersForContext(ctx, env = process.env) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...providerSpecificHeaders(ctx.providerId, env),
+  }
+
+  if (!ctx.key) {
+    return headers
+  }
+
+  const kind = String(ctx.endpointKind || '').toLowerCase()
+  const isAnthropicNative =
+    kind === 'anthropic' ||
+    kind === 'anthropic-native' ||
+    kind === ENDPOINT_KIND.ANTHROPIC_NATIVE
+
+  if (isAnthropicNative) {
+    headers['x-api-key'] = ctx.key
+    headers['anthropic-version'] = env.ANTHROPIC_VERSION || '2023-06-01'
+    if (env.ANTHROPIC_BETA) {
+      headers['anthropic-beta'] = env.ANTHROPIC_BETA
+    }
+  } else {
+    headers['Authorization'] = `Bearer ${ctx.key}`
+  }
+
   return headers
 }
 

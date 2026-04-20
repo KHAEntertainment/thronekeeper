@@ -390,9 +390,9 @@ class ProxyManager {
                     this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`);
                     throw new Error(errorMsg);
                 }
-                base.ANTHROPIC_API_KEY = key;
+                base.KIMI_API_KEY = key;
                 setBaseUrl('https://api.kimi.com/coding');
-                this.log.appendLine(`[ProxyManager] Kimi Coding Plan key found: ANTHROPIC_API_KEY set`);
+                this.log.appendLine(`[ProxyManager] Kimi Coding Plan key found: KIMI_API_KEY set`);
                 break;
             }
             case 'minimax': {
@@ -464,6 +464,61 @@ class ProxyManager {
                 }
                 break;
             }
+        }
+        // KHA-267: Serialize mixed-provider config if enabled
+        if (opts.mixedProviders?.enabled) {
+            try {
+                const mp = opts.mixedProviders;
+                const tiers = ['reasoning', 'completion', 'value'];
+                // Collect unique provider IDs to resolve keys
+                const uniqueProviders = new Set();
+                for (const tier of tiers) {
+                    uniqueProviders.add(mp[tier].providerId);
+                }
+                // Resolve keys for each unique provider (smart key validation)
+                const providerKeys = new Map();
+                const missingProviders = [];
+                for (const pid of uniqueProviders) {
+                    const key = pid === 'anthropic'
+                        ? await this.secrets.getAnthropicKey()
+                        : await this.secrets.getProviderKey(pid);
+                    if (key) {
+                        providerKeys.set(pid, key);
+                        this.log.appendLine(`[ProxyManager] Mixed provider key found for: ${pid}`);
+                    }
+                    else {
+                        missingProviders.push(pid);
+                    }
+                }
+                if (missingProviders.length > 0) {
+                    const errorMsg = `Mixed provider mode missing API keys for: ${missingProviders.join(', ')}`;
+                    this.log.appendLine(`[ProxyManager] ERROR: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+                // Build MIXED_PROVIDERS_CONFIG object
+                const mixedConfig = {};
+                for (const tier of tiers) {
+                    const binding = mp[tier];
+                    mixedConfig[tier] = {
+                        providerId: binding.providerId,
+                        baseUrl: binding.baseUrl,
+                        key: providerKeys.get(binding.providerId) || null,
+                        model: binding.model,
+                        displayModel: binding.displayModel || binding.model,
+                        endpointKind: binding.endpointKind || undefined,
+                    };
+                }
+                base.MIXED_PROVIDERS_CONFIG = JSON.stringify(mixedConfig);
+                this.log.appendLine(`[ProxyManager] Mixed provider config serialized: ${uniqueProviders.size} unique providers`);
+                this.log.appendLine(`[ProxyManager] Mixed tiers: reasoning=${mp.reasoning.providerId}/${mp.reasoning.model}, completion=${mp.completion.providerId}/${mp.completion.model}, value=${mp.value.providerId}/${mp.value.model}`);
+            }
+            catch (err) {
+                this.log.appendLine(`[ProxyManager] Failed to serialize mixed provider config: ${err}`);
+                throw err;
+            }
+        }
+        else {
+            delete base.MIXED_PROVIDERS_CONFIG;
         }
         return base;
     }

@@ -1,6 +1,8 @@
 # Exclude dev sources from VSIX
 **/*.map
 src/**
+tests/**
+*.config.ts
 .vscode/**
 .vscode-test/**
 
@@ -17,4 +19,3 @@ node_modules/**
 
 # Keep webview assets
 !webview/**
-

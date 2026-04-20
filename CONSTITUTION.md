@@ -39,6 +39,11 @@ interface ProviderMap {
 - **saveModels Contract**: Must include `providerId` field
 - **Key Normalization**: Storage keys must use 'completion' (never 'coding')
 
+### 6. Mixed Provider Routing (KHA-267)
+- **Strict Isolation**: `ProviderContext` instances must remain strictly isolated per request tier. The proxy must not leak headers or credentials between mixed providers.
+- **Graceful Degradation**: If `MIXED_PROVIDERS_CONFIG` is not set or disabled, routing must gracefully fall back to the generic `effectiveProvider` logic.
+- **Smart Validation**: Before routing starts, all unique providers defined in the mixed config must have securely validated keys in VS Code `SecretStorage`.
+
 ## Contracts & Schemas
 
 ### Message Schema Location & Versioning

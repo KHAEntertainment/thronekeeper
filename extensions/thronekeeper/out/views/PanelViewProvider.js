@@ -38,6 +38,7 @@ const vscode = __importStar(require("vscode"));
 const Models_1 = require("../services/Models");
 // Comment 2: Import schema validation for runtime message validation
 const messages_1 = require("../schemas/messages");
+const config_1 = require("../schemas/config");
 class PanelViewProvider {
     /**
      * Determines the appropriate ConfigurationTarget based on applyScope setting and workspace availability.
@@ -47,13 +48,7 @@ class PanelViewProvider {
         if (applyScope === 'global') {
             return vscode.ConfigurationTarget.Global;
         }
-        // Check if workspace is available before using Workspace target
-        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-            return vscode.ConfigurationTarget.Workspace;
-        }
-        // Fall back to Global if no workspace is open
-        this.log.appendLine('[getConfigurationTarget] No workspace open, falling back to Global settings');
-        return vscode.ConfigurationTarget.Global;
+        return vscode.ConfigurationTarget.Workspace;
     }
     /**
      * Comment 3: Normalize provider map to canonical keys { reasoning, completion, value }
@@ -197,7 +192,7 @@ class PanelViewProvider {
         this.modelsCache = new Map();
         // Comment 4: Sequence token tracking for race protection
         this.sequenceTokenCounter = 0;
-        this.currentSequenceToken = null;
+        this.currentSequenceTokenByProvider = new Map();
         // Comment 6: Trace ID for provider flows (DEBUG mode only)
         this.currentTraceId = null;
         // Initialize provider from configuration
@@ -275,7 +270,8 @@ class PanelViewProvider {
                         break;
                     case 'requestModels':
                         // Phase 2: Pass through token for race protection
-                        await this.handleListModels(false, msg.token);
+                        // Phase 3b: Provide requested provider from message
+                        await this.handleListModels(false, msg.token, msg.provider);
                         break;
                     case 'requestPopularModels':
                         await this.postPopularModels();
@@ -324,7 +320,12 @@ class PanelViewProvider {
                         await this.handleSaveModels({ providerId: msg.providerId, reasoning: msg.reasoning, completion: msg.completion, value: msg.value });
                         break;
                     case 'setModelFromList':
-                        await this.handleSetModelFromList(msg.modelId, msg.modelType);
+                        await this.handleSetModelFromList({
+                            modelId: msg.modelId,
+                            model: msg.model,
+                            modelType: msg.modelType,
+                            provider: msg.provider,
+                        });
                         break;
                     case 'toggleThreeModelMode':
                         // Comment 3: Handle canonical toggleThreeModelMode message
@@ -381,6 +382,10 @@ class PanelViewProvider {
                         break;
                     case 'updateFeatureFlag':
                         await this.handleUpdateFeatureFlag(msg.flag, msg.value);
+                        break;
+                    case 'saveMixedProviders':
+                        // KHA-267: Handle mixed-provider configuration save
+                        await this.handleSaveMixedProviders(msg);
                         break;
                     default:
                         this.log.appendLine(`Unknown message type received: ${msg.type}`);
@@ -530,7 +535,9 @@ class PanelViewProvider {
                 completionModel,
                 valueModel,
                 // Comment 19: Send feature flags to webview
-                featureFlags
+                featureFlags,
+                // KHA-267: Mixed provider configuration
+                mixedProviders: config.get('mixedProviders', null)
             }
         });
     }
@@ -542,7 +549,7 @@ class PanelViewProvider {
         // Comment 2: Generate sequence token for postModels to ensure validation uniform
         this.sequenceTokenCounter++;
         const sequenceToken = `seq-${this.sequenceTokenCounter}`;
-        this.currentSequenceToken = this.sequenceTokenCounter;
+        this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter);
         if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
             this.post({
                 type: 'models',
@@ -553,9 +560,9 @@ class PanelViewProvider {
             this.post({ type: 'models', payload: { models: [], provider, token: sequenceToken } });
         }
     }
-    async handleListModels(freeOnly, requestToken) {
-        // Use runtimeProvider for UI operations - this represents the actual provider being used
-        const provider = this.runtimeProvider || 'openrouter';
+    async handleListModels(freeOnly, requestToken, requestedProvider) {
+        // Use requestedProvider (for Phase 3b) or fallback to runtimeProvider 
+        const provider = requestedProvider || this.runtimeProvider || 'openrouter';
         // Comment 4: Generate sequence token if not provided, increment counter
         let sequenceToken;
         if (requestToken) {
@@ -564,12 +571,12 @@ class PanelViewProvider {
             const requestSequenceNum = requestToken.startsWith('seq-')
                 ? parseInt(requestToken.replace('seq-', ''), 10)
                 : null;
-            this.currentSequenceToken = requestSequenceNum !== null ? requestSequenceNum : this.sequenceTokenCounter;
+            this.currentSequenceTokenByProvider.set(provider, requestSequenceNum !== null ? requestSequenceNum : this.sequenceTokenCounter);
         }
         else {
             this.sequenceTokenCounter++;
             sequenceToken = `seq-${this.sequenceTokenCounter}`;
-            this.currentSequenceToken = this.sequenceTokenCounter;
+            this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter);
         }
         // Comment 6: Include trace ID in logs (DEBUG mode only)
         const traceInfo = this.currentTraceId ? ` [Trace ${this.currentTraceId}]` : '';
@@ -656,8 +663,9 @@ class PanelViewProvider {
             const responseSequenceNum = sequenceToken.startsWith('seq-')
                 ? parseInt(sequenceToken.replace('seq-', ''), 10)
                 : null;
-            if (responseSequenceNum !== null && this.currentSequenceToken !== null && responseSequenceNum < this.currentSequenceToken) {
-                this.log.appendLine(`[handleListModels] DISCARDING late response - sequence token ${sequenceToken} is older than current ${this.currentSequenceToken}`);
+            const currentProviderSequenceToken = this.currentSequenceTokenByProvider.get(provider) ?? null;
+            if (responseSequenceNum !== null && currentProviderSequenceToken !== null && responseSequenceNum < currentProviderSequenceToken) {
+                this.log.appendLine(`[handleListModels] DISCARDING late response for ${provider} - sequence token ${sequenceToken} is older than current ${currentProviderSequenceToken}`);
                 return; // Discard late response
             }
             this.modelsCache.set(provider, { models, timestamp: Date.now() });
@@ -715,6 +723,9 @@ class PanelViewProvider {
             else if (errorType === 'timeout') {
                 // Comment 3: Use error message from Models.ts if it's a timeout
                 errorMessage = err.message || 'Model list request timed out. You can enter model IDs manually.';
+            }
+            else if (errorType === 'manual_entry') {
+                errorMessage = err.message || 'Enter model IDs manually for this provider.';
             }
             // Comment 6: Include trace ID in error payload (DEBUG mode only)
             const cfg = vscode.workspace.getConfiguration('claudeThrone');
@@ -814,7 +825,7 @@ class PanelViewProvider {
         this.log.appendLine(`[handleUpdateProvider] Cleared cache for previous provider: ${oldProvider}`);
         // Comment 5: Reset sequence token counter on provider switch to ensure clean state
         this.sequenceTokenCounter = 0;
-        this.currentSequenceToken = null;
+        this.currentSequenceTokenByProvider.delete(provider);
         // Comment 6: Generate trace ID for provider flow (DEBUG mode only)
         const cfg = vscode.workspace.getConfiguration('claudeThrone');
         const debug = cfg.get('proxy.debug', false);
@@ -830,7 +841,7 @@ class PanelViewProvider {
         // Comment 2: Generate sequence token for immediate empty list after provider switch
         this.sequenceTokenCounter++;
         const sequenceToken = `seq-${this.sequenceTokenCounter}`;
-        this.currentSequenceToken = this.sequenceTokenCounter;
+        this.currentSequenceTokenByProvider.set(provider, this.sequenceTokenCounter);
         // Clear the webview with an empty list immediately after switching to prevent stale renders
         this.post({
             type: 'models',
@@ -1244,68 +1255,110 @@ class PanelViewProvider {
             const port = cfg.get('proxy.port', 3000);
             const debug = cfg.get('proxy.debug', false);
             const twoModelMode = cfg.get('twoModelMode', false);
+            const featureFlags = cfg.get('featureFlags', {});
+            const mixedProvidersRaw = featureFlags.enableMixedProviders ? cfg.get('mixedProviders', null) : null;
+            let mixedProviders = null;
+            if (mixedProvidersRaw?.enabled) {
+                const parsed = config_1.MixedProviderConfigSchema.safeParse(mixedProvidersRaw);
+                if (!parsed.success) {
+                    const errorMsg = `Invalid mixed-provider configuration: ${JSON.stringify(parsed.error.format())}`;
+                    this.log.appendLine(`[handleStartProxy] ERROR: ${errorMsg}`);
+                    vscode.window.showWarningMessage(errorMsg);
+                    this.post({
+                        type: 'proxyError',
+                        payload: {
+                            provider: this.runtimeProvider || 'openrouter',
+                            error: errorMsg,
+                            errorType: 'config'
+                        }
+                    });
+                    return;
+                }
+                mixedProviders = parsed.data;
+                this.log.appendLine(`[handleStartProxy] Mixed provider config enabled and validated`);
+            }
             // Read models from provider-specific configuration with detailed logging
             const modelSelectionsByProvider = cfg.get('modelSelectionsByProvider', {});
             let reasoningModel = '';
             let completionModel = '';
             let valueModel = '';
-            this.log.appendLine(`[handleStartProxy] Reading models for provider: ${this.runtimeProvider}`);
-            this.log.appendLine(`[handleStartProxy] Full modelSelectionsByProvider: ${JSON.stringify(modelSelectionsByProvider)}`);
-            if (modelSelectionsByProvider[this.runtimeProvider]) {
-                // Comment 3: Normalize provider map before reading
-                const normalized = this.normalizeProviderMap(modelSelectionsByProvider[this.runtimeProvider], this.runtimeProvider);
-                reasoningModel = normalized.reasoning;
-                completionModel = normalized.completion;
-                valueModel = normalized.value;
-                this.log.appendLine(`[handleStartProxy] Found provider-specific models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`);
+            const mixedRoutingEnabled = Boolean(mixedProviders?.enabled);
+            let hasProviderSpecific = false;
+            let reasoningSource = 'from global fallback';
+            let completionSource = 'from global fallback';
+            let valueSource = 'from global fallback';
+            if (mixedProviders?.enabled) {
+                const enabledMixedProviders = mixedProviders;
+                reasoningModel = enabledMixedProviders.reasoning.model;
+                completionModel = enabledMixedProviders.completion.model;
+                valueModel = enabledMixedProviders.value.model;
+                hasProviderSpecific = true;
+                reasoningSource = `from mixed provider config (${enabledMixedProviders.reasoning.providerId})`;
+                completionSource = `from mixed provider config (${enabledMixedProviders.completion.providerId})`;
+                valueSource = `from mixed provider config (${enabledMixedProviders.value.providerId})`;
+                this.log.appendLine(`[handleStartProxy] Using mixed-provider models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`);
             }
             else {
-                this.log.appendLine(`[handleStartProxy] No models found for provider ${this.runtimeProvider} in modelSelectionsByProvider`);
-            }
-            // Fallback to global keys if provider-specific not found, with explicit confirmation
-            if (!reasoningModel) {
-                const fallbackReasoning = cfg.get('reasoningModel', '');
-                if (fallbackReasoning) {
-                    const useFallback = await vscode.window.showWarningMessage(`No reasoning model selected for provider "${this.runtimeProvider}". Using global model "${fallbackReasoning}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
-                    if (useFallback !== 'Continue') {
-                        this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
-                        return;
-                    }
-                    reasoningModel = fallbackReasoning;
-                    this.log.appendLine(`[handleStartProxy] Falling back to global reasoningModel: ${reasoningModel}`);
-                    this.log.appendLine(`[handleStartProxy] WARNING: Using fallback global keys. This may indicate a configuration save issue.`);
+                this.log.appendLine(`[handleStartProxy] Reading models for provider: ${this.runtimeProvider}`);
+                this.log.appendLine(`[handleStartProxy] Full modelSelectionsByProvider: ${JSON.stringify(modelSelectionsByProvider)}`);
+                if (modelSelectionsByProvider[this.runtimeProvider]) {
+                    // Comment 3: Normalize provider map before reading
+                    const normalized = this.normalizeProviderMap(modelSelectionsByProvider[this.runtimeProvider], this.runtimeProvider);
+                    reasoningModel = normalized.reasoning;
+                    completionModel = normalized.completion;
+                    valueModel = normalized.value;
+                    this.log.appendLine(`[handleStartProxy] Found provider-specific models: reasoning=${reasoningModel}, completion=${completionModel}, value=${valueModel}`);
                 }
-            }
-            if (!completionModel) {
-                const fallbackCompletion = cfg.get('completionModel', '');
-                if (fallbackCompletion) {
-                    const useFallback = await vscode.window.showWarningMessage(`No completion model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackCompletion}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
-                    if (useFallback !== 'Continue') {
-                        this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
-                        return;
-                    }
-                    completionModel = fallbackCompletion;
-                    this.log.appendLine(`[handleStartProxy] Falling back to global completionModel: ${completionModel}`);
+                else {
+                    this.log.appendLine(`[handleStartProxy] No models found for provider ${this.runtimeProvider} in modelSelectionsByProvider`);
                 }
-            }
-            if (!valueModel) {
-                const fallbackValue = cfg.get('valueModel', '');
-                if (fallbackValue) {
-                    const useFallback = await vscode.window.showWarningMessage(`No value model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackValue}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
-                    if (useFallback !== 'Continue') {
-                        this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
-                        return;
+                // Fallback to global keys if provider-specific not found, with explicit confirmation
+                if (!reasoningModel) {
+                    const fallbackReasoning = cfg.get('reasoningModel', '');
+                    if (fallbackReasoning) {
+                        const useFallback = await vscode.window.showWarningMessage(`No reasoning model selected for provider "${this.runtimeProvider}". Using global model "${fallbackReasoning}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
+                        if (useFallback !== 'Continue') {
+                            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
+                            return;
+                        }
+                        reasoningModel = fallbackReasoning;
+                        this.log.appendLine(`[handleStartProxy] Falling back to global reasoningModel: ${reasoningModel}`);
+                        this.log.appendLine(`[handleStartProxy] WARNING: Using fallback global keys. This may indicate a configuration save issue.`);
                     }
-                    valueModel = fallbackValue;
-                    this.log.appendLine(`[handleStartProxy] Falling back to global valueModel: ${valueModel}`);
                 }
+                if (!completionModel) {
+                    const fallbackCompletion = cfg.get('completionModel', '');
+                    if (fallbackCompletion) {
+                        const useFallback = await vscode.window.showWarningMessage(`No completion model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackCompletion}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
+                        if (useFallback !== 'Continue') {
+                            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
+                            return;
+                        }
+                        completionModel = fallbackCompletion;
+                        this.log.appendLine(`[handleStartProxy] Falling back to global completionModel: ${completionModel}`);
+                    }
+                }
+                if (!valueModel) {
+                    const fallbackValue = cfg.get('valueModel', '');
+                    if (fallbackValue) {
+                        const useFallback = await vscode.window.showWarningMessage(`No value model selected for provider "${this.runtimeProvider}" in three-model mode. Using global model "${fallbackValue}" which may be from a different provider. Continue anyway?`, 'Continue', 'Cancel');
+                        if (useFallback !== 'Continue') {
+                            this.log.appendLine(`[handleStartProxy] User cancelled due to fallback requirement`);
+                            return;
+                        }
+                        valueModel = fallbackValue;
+                        this.log.appendLine(`[handleStartProxy] Falling back to global valueModel: ${valueModel}`);
+                    }
+                }
+                // Log the source of each model
+                hasProviderSpecific = Boolean(modelSelectionsByProvider[this.runtimeProvider]?.reasoning);
+                reasoningSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback';
+                completionSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback';
+                valueSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback';
             }
-            // Log the source of each model
-            const hasProviderSpecific = modelSelectionsByProvider[this.runtimeProvider] &&
-                modelSelectionsByProvider[this.runtimeProvider].reasoning;
             this.log.appendLine(`[handleStartProxy] Model source - Provider-specific: ${hasProviderSpecific ? 'YES' : 'NO'}, Fallback used: ${hasProviderSpecific ? 'NO' : 'YES'}`);
             // Comment 9: Post configWarning when fallback occurs
-            if (!hasProviderSpecific && reasoningModel) {
+            if (!mixedRoutingEnabled && !hasProviderSpecific && reasoningModel) {
                 this.post({
                     type: 'configWarning',
                     payload: {
@@ -1360,7 +1413,7 @@ class PanelViewProvider {
                 return;
             }
             // Add validation before starting proxy for stale fallback usage
-            if (!hasProviderSpecific && reasoningModel) {
+            if (!mixedRoutingEnabled && !hasProviderSpecific && reasoningModel) {
                 // Check if we're using stale fallback values (e.g., GPT models for Deepseek provider)
                 const isStaleCombination = (this.runtimeProvider === 'deepseek' && reasoningModel.includes('gpt')) ||
                     (this.runtimeProvider === 'glm' && reasoningModel.includes('gpt')) ||
@@ -1388,12 +1441,13 @@ class PanelViewProvider {
                 this.log.appendLine(`[handleStartProxy] - completionModel: ${completionModel}`);
             }
             // Log the final models that will be used
-            const reasoningSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback';
-            const completionSource = hasProviderSpecific ? 'from provider-specific config' : 'from global fallback';
             this.log.appendLine(`[handleStartProxy] Final models for proxy start:`);
             this.log.appendLine(`[handleStartProxy] - reasoning=${reasoningModel} (${reasoningSource})`);
             if (completionModel) {
                 this.log.appendLine(`[handleStartProxy] - completion=${completionModel} (${completionSource})`);
+            }
+            if (valueModel) {
+                this.log.appendLine(`[handleStartProxy] - value=${valueModel} (${valueSource})`);
             }
             this.log.appendLine(`[handleStartProxy] Starting proxy: provider=${this.runtimeProvider}, port=${port}, twoModelMode=${twoModelMode}`);
             this.log.appendLine(`[handleStartProxy] Models: reasoning=${reasoningModel || 'NOT SET'}, completion=${completionModel || 'NOT SET'}`);
@@ -1423,6 +1477,7 @@ class PanelViewProvider {
                 debug,
                 reasoningModel,
                 completionModel,
+                ...(mixedProviders && { mixedProviders }),
                 ...(customBaseUrl && { customBaseUrl }),
                 ...(customProviderId && { customProviderId })
             });
@@ -1514,10 +1569,10 @@ class PanelViewProvider {
     }
     async handleRevertApply() {
         try {
-            this.log.appendLine('[handleRevertApply] Reverting Claude Code settings to Anthropic defaults');
+            this.log.appendLine('[handleRevertApply] Reverting Claude Code settings to Claude Code defaults');
             await vscode.commands.executeCommand('claudeThrone.revertApply', { autoSelectFirstFolder: true });
             this.postStatus();
-            vscode.window.showInformationMessage('Reverted Claude Code settings to Anthropic defaults');
+            vscode.window.showInformationMessage('Reverted Claude Code settings to Claude Code defaults');
         }
         catch (err) {
             this.log.appendLine(`[handleRevertApply] Error: ${err}`);
@@ -1663,7 +1718,17 @@ class PanelViewProvider {
         // Handle model filtering based on search and sort parameters
         // Implementation depends on existing model data
     }
-    async handleSetModelFromList(modelId, modelType) {
+    async handleSetModelFromList(modelIdOrPayload, maybeModelType) {
+        const payload = typeof modelIdOrPayload === 'object' && modelIdOrPayload !== null ? modelIdOrPayload : null;
+        const modelId = payload ? String(payload.modelId || payload.model || '') : String(modelIdOrPayload || '');
+        const modelType = payload ? payload.modelType : maybeModelType;
+        if (payload?.provider && payload.provider !== this.currentProvider) {
+            await this.handleUpdateProvider(payload.provider);
+        }
+        if (!modelId || !modelType) {
+            this.log.appendLine(`[handleSetModelFromList] Missing modelId or modelType; skipping save`);
+            return;
+        }
         const cfg = vscode.workspace.getConfiguration('claudeThrone');
         // Determine configuration target based on applyScope setting
         const applyScope = cfg.get('applyScope', 'workspace');
@@ -1773,7 +1838,7 @@ class PanelViewProvider {
             this.log.appendLine(`[handleUpdateFeatureFlag] Rejected non-boolean value for ${flag}: ${JSON.stringify(value)}`);
             return;
         }
-        const KNOWN_FLAGS = ['enableAgentTeams'];
+        const KNOWN_FLAGS = ['enableAgentTeams', 'enableMixedProviders'];
         if (!KNOWN_FLAGS.includes(flag)) {
             this.log.appendLine(`[handleUpdateFeatureFlag] Unknown flag: ${flag}`);
             return;
@@ -1800,6 +1865,86 @@ class PanelViewProvider {
         }
         this.log.appendLine(`[handleUpdateFeatureFlag] ${flag} updated to ${value}`);
     }
+    /**
+     * KHA-267: Handle saving mixed-provider configuration.
+     * Persists per-tier provider bindings to VS Code settings.
+     */
+    async handleSaveMixedProviders(msg) {
+        const postMixedProviderConfigError = (error) => {
+            this.post({
+                type: 'proxyError',
+                payload: {
+                    provider: this.runtimeProvider || 'openrouter',
+                    error,
+                    errorType: 'config',
+                },
+            });
+        };
+        if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+            this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed payload: expected object`);
+            postMixedProviderConfigError('Mixed provider settings could not be saved because the payload was malformed.');
+            return;
+        }
+        const cfg = vscode.workspace.getConfiguration('claudeThrone');
+        const applyScope = cfg.get('applyScope', 'workspace');
+        const target = this.getConfigurationTarget(applyScope);
+        const hasTier = (tier) => {
+            const value = msg[tier];
+            return value && typeof value === 'object' && !Array.isArray(value);
+        };
+        const enabled = Boolean(msg.enabled);
+        if (enabled && (!hasTier('reasoning') || !hasTier('completion') || !hasTier('value'))) {
+            this.log.appendLine(`[handleSaveMixedProviders] Rejected malformed enabled payload: missing tier objects`);
+            postMixedProviderConfigError('Mixed provider settings are incomplete. Reasoning, completion, and value tiers are required when mixed routing is enabled.');
+            return;
+        }
+        if (!enabled) {
+            const disabledConfig = { enabled: false };
+            this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=false`);
+            await cfg.update('mixedProviders', disabledConfig, target);
+            this.log.appendLine(`[handleSaveMixedProviders] ✅ Mixed provider config disabled`);
+            this.postConfig();
+            return;
+        }
+        const fallbackTier = {
+            providerId: this.runtimeProvider || 'openrouter',
+            endpointKind: 'auto'
+        };
+        const buildTier = (tier) => {
+            const binding = hasTier(tier) ? msg[tier] : fallbackTier;
+            const readString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+            const providerId = readString(binding.providerId) || fallbackTier.providerId;
+            const model = readString(binding.model);
+            return {
+                providerId,
+                baseUrl: readString(binding.baseUrl),
+                model,
+                displayModel: readString(binding.displayModel) || model,
+                endpointKind: readString(binding.endpointKind) || 'auto',
+            };
+        };
+        const mixedConfig = {
+            enabled,
+            reasoning: buildTier('reasoning'),
+            completion: buildTier('completion'),
+            value: buildTier('value'),
+        };
+        if (enabled) {
+            const parsed = config_1.MixedProviderConfigSchema.safeParse(mixedConfig);
+            if (!parsed.success) {
+                this.log.appendLine(`[handleSaveMixedProviders] Rejected invalid mixed config: ${JSON.stringify(parsed.error.format())}`);
+                postMixedProviderConfigError(`Mixed provider settings are invalid: ${parsed.error.issues.map(issue => issue.message).join('; ')}`);
+                return;
+            }
+        }
+        this.log.appendLine(`[handleSaveMixedProviders] Saving mixed config: enabled=${enabled}`);
+        this.log.appendLine(`[handleSaveMixedProviders] reasoning=${mixedConfig.reasoning.providerId}/${mixedConfig.reasoning.model}`);
+        this.log.appendLine(`[handleSaveMixedProviders] completion=${mixedConfig.completion.providerId}/${mixedConfig.completion.model}`);
+        this.log.appendLine(`[handleSaveMixedProviders] value=${mixedConfig.value.providerId}/${mixedConfig.value.model}`);
+        await cfg.update('mixedProviders', mixedConfig, target);
+        this.log.appendLine(`[handleSaveMixedProviders] ✅ Mixed provider config saved`);
+        this.postConfig();
+    }
     getHtml() {
         const nonce = String(Math.random()).slice(2);
         const cssUri = this.view.webview.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, 'webview', 'main.css'));
@@ -1822,11 +1967,27 @@ class PanelViewProvider {
 
     <main class="main-content">
       <div class="content-grid">
-        <!-- Provider Configuration Card -->
-        <div class="card">
-          <h2 class="card-title">Provider</h2>
+        <div class="card provider-card">
+          <h2 class="card-title" id="providerCardTitle">Provider</h2>
+          <!-- KHA-267: Tabbed Provider Header -->
+          <div id="providerTabBar" style="display: none; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--vscode-widget-border); margin-bottom: 8px; padding-bottom: 0;">
+            <button class="provider-tab active" id="providerTab-primary" data-tab="primary" style="padding: 6px 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background)); border: 1px solid var(--vscode-widget-border); border-bottom: 2px solid var(--vscode-focusBorder); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); font-family: inherit; margin: 0; position: relative; bottom: -1px;">
+              Provider
+            </button>
+            <button class="provider-tab" id="providerTab-1" data-tab="1" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
+              Provider 2
+              <span class="tab-close" data-close="1" role="button" tabindex="0" aria-label="Remove Provider 2 tab" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+            </button>
+            <button class="provider-tab" id="providerTab-2" data-tab="2" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-descriptionForeground); font-family: inherit; margin: 0; position: relative;">
+              Provider 3
+              <span class="tab-close" data-close="2" role="button" tabindex="0" aria-label="Remove Provider 3 tab" style="margin-left: 6px; font-size: 9px; cursor: pointer; opacity: 0.5;" title="Remove">✕</span>
+            </button>
+            <button id="addProviderTabBtn" style="display: none; padding: 6px 10px; font-size: 13px; font-weight: 600; background: var(--vscode-input-background); border: 1px solid var(--vscode-widget-border); border-bottom: 1px solid var(--vscode-widget-border); border-radius: 6px 6px 0 0; cursor: pointer; color: var(--vscode-textLink-foreground); font-family: inherit; margin: 0; position: relative;" title="Add another provider">
+              +
+            </button>
+          </div>
           
-          <div class="form-group">
+          <div class="form-group" style="margin-top: 8px;">
             <select class="form-select" id="providerSelect">
               <!-- Built-in providers will be populated dynamically -->
             </select>
@@ -1910,6 +2071,21 @@ class PanelViewProvider {
           </div>
         </div>
 
+        <!-- Model List Card -->
+        <div class="card model-list-card">
+          <h2 class="card-title" id="modelListTitle">Filter Models</h2>
+          
+          <div class="model-list-header">
+            <input class="model-search" type="text" id="modelSearch" placeholder="Filter models...">
+          </div>
+
+          <div id="modelListContainer" class="model-list">
+            <div class="loading-container">
+              <span class="loading-spinner"></span>Loading models...
+            </div>
+          </div>
+        </div>
+
         <!-- Save Combo Button -->
         <button class="btn-save-combo hidden" id="saveComboBtn" title="Save current model selection" style="margin-bottom: 16px;">+ Save Model Combo</button>
 
@@ -1956,20 +2132,7 @@ class PanelViewProvider {
           </div>
         </details>
 
-        <!-- Model List Card -->
-        <div class="card model-list-card">
-          <h2 class="card-title" id="modelListTitle">Filter Models</h2>
-          
-          <div class="model-list-header">
-            <input class="model-search" type="text" id="modelSearch" placeholder="Filter models...">
-          </div>
 
-          <div id="modelListContainer" class="model-list">
-            <div class="loading-container">
-              <span class="loading-spinner"></span>Loading models...
-            </div>
-          </div>
-        </div>
       </div>
     </main>
 

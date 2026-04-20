@@ -24,6 +24,18 @@ export function startUpstreamMock({ mode = 'json', jsonResponse, sseChunks, asse
   const server = http.createServer((req, res) => {
     // Comment 4: Handle GET /v1/models for endpoint kind probing
     if (req.method === 'GET' && req.url && req.url.endsWith('/v1/models')) {
+      const hasAnthropicAuth = !!req.headers['x-api-key']
+      const hasOpenAIAuth = typeof req.headers['authorization'] === 'string' && req.headers['authorization'].startsWith('Bearer ')
+      if (endpoint === 'anthropic' && !hasAnthropicAuth) {
+        res.writeHead(401, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'Missing x-api-key header' } }))
+        return
+      }
+      if (endpoint === 'openai' && !hasOpenAIAuth) {
+        res.writeHead(401, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: 'Missing Authorization Bearer header', type: 'invalid_request_error' } }))
+        return
+      }
       if (assertAuth) {
         try {
           assertAuth(req.headers)
@@ -74,7 +86,12 @@ export function startUpstreamMock({ mode = 'json', jsonResponse, sseChunks, asse
           res.writeHead(statusCode, { 'content-type': 'application/json' })
           res.end(data)
         } else if (mode === 'sse') {
-          res.writeHead(200, {
+          if (statusCode < 200 || statusCode >= 300) {
+            res.writeHead(statusCode, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ error: { message: `status ${statusCode}` } }))
+            return
+          }
+          res.writeHead(statusCode, {
             'content-type': 'text/event-stream',
             'cache-control': 'no-cache',
             connection: 'keep-alive',
@@ -130,8 +147,18 @@ export async function spawnProxyProcess({ port, baseUrl, env = {}, isolateEnv = 
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  let stdout = ''
+  let stderr = ''
+  child.stdout?.on('data', (chunk) => { stdout += chunk.toString() })
+  child.stderr?.on('data', (chunk) => { stderr += chunk.toString() })
   // Wait until the server accepts connections: simple retry loop
-  await waitForReady(`http://127.0.0.1:${port}/health`, `http://127.0.0.1:${port}`)
+  try {
+    await waitForReady(`http://127.0.0.1:${port}/health`, `http://127.0.0.1:${port}`)
+  } catch (err) {
+    child.kill()
+    err.message = `${err.message}\nstdout:\n${stdout}\nstderr:\n${stderr}`
+    throw err
+  }
   return child
 }
 
@@ -142,7 +169,7 @@ async function waitForReady(healthUrl, baseUrl, attempts = 30) {
     for (const url of urls) {
       try {
         const res = await fetch(url, { method: 'GET' })
-        if (res.status === 200) return // Ready when health returns 200
+        if (res.status === 200 || res.status === 503) return // 503 still means the proxy route is listening but not configured
       } catch (_) {
         // Continue to next attempt
       }

@@ -173,16 +173,15 @@ describe('Schema Contract Tests: /v1/messages', () => {
       const child = await spawnProxyProcess({
         port: proxyPort,
         baseUrl: `http://127.0.0.1:${upstream.port}`,
-        env: { CUSTOM_API_KEY: 'testkey' }, // Use valid key, test will validate error structure elsewhere
+        env: {},
         isolateEnv: true
       })
 
       try {
-        // Test with invalid header to get structured error
+        // Test missing configured key to get a structured proxy error.
         const res = await request(`http://127.0.0.1:${proxyPort}`)
           .post('/v1/messages')
           .set('content-type', 'application/json')
-          .set('x-api-key', 'test-key') // Invalid for OpenAI-compatible endpoint
           .send({ messages: [{ role: 'user', content: 'Hi' }], stream: false })
           .expect(400)
 
@@ -244,4 +243,3 @@ describe('Schema Contract Tests: /v1/messages', () => {
     })
   })
 })
-

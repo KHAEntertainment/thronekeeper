@@ -293,7 +293,7 @@ describe('POST /v1/messages (contract validation)', () => {
 
         // Should have error structure
         expect(res.body.error || res.text).toBeDefined()
-        expect(res.body.error || res.text).toMatch(/API key|No API key/i)
+        expect(res.body.error?.message || res.text).toMatch(/API key|No API key/i)
       } finally {
         await stopChild(child)
         upstream.server.close()
@@ -301,4 +301,3 @@ describe('POST /v1/messages (contract validation)', () => {
     })
   })
 })
-

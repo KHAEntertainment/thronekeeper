@@ -12,7 +12,7 @@ const makeResponse = (status: number, bodyObj?: any) => {
 }
 
 // Mock undici at top level
-const mockRequest = vi.fn()
+const { mockRequest } = vi.hoisted(() => ({ mockRequest: vi.fn() }))
 vi.mock('undici', () => ({ request: mockRequest }))
 
 describe('Models.list: normalization and error handling', () => {
@@ -22,9 +22,31 @@ describe('Models.list: normalization and error handling', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.restoreAllMocks()
     vi.resetModules()
-    vi.doUnmock('undici')
+  })
+
+  it('returns static MiniMax model presets without fetching', async () => {
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
+    const ids = await listModels('minimax', 'https://api.minimax.io/anthropic', 'KEY')
+
+    expect(ids).toEqual([
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.1',
+      'MiniMax-M2.1-highspeed',
+      'MiniMax-M2',
+    ])
+    expect(mockRequest).not.toHaveBeenCalled()
+  })
+
+  it('returns the static Kimi Code model preset without fetching', async () => {
+    const { listModels } = await import('../extensions/thronekeeper/src/services/Models')
+    const ids = await listModels('kimi', 'https://api.kimi.com/coding', 'KEY')
+
+    expect(ids).toEqual(['kimi-for-coding'])
+    expect(mockRequest).not.toHaveBeenCalled()
   })
 
   it('normalizes OpenAI-style data[] for Deepseek', async () => {

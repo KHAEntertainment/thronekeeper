@@ -1,7 +1,31 @@
 import { request } from 'undici'
 import { getModelsEndpointForBase } from './endpoints'
 
-export type ProviderId = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'custom' | string
+export type ProviderId = 'openrouter' | 'openai' | 'together' | 'deepseek' | 'glm' | 'kimi' | 'minimax' | 'custom' | string
+
+export class ManualEntryError extends Error {
+  readonly errorType = 'manual_entry'
+
+  constructor(provider: string) {
+    super(`${provider} does not expose a compatible model-list endpoint. Enter model IDs manually.`)
+    this.name = 'ManualEntryError'
+  }
+}
+
+export const STATIC_PROVIDER_MODELS: Record<string, string[]> = {
+  minimax: [
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.1',
+    'MiniMax-M2.1-highspeed',
+    'MiniMax-M2',
+  ],
+  kimi: [
+    'kimi-for-coding',
+  ],
+}
 
 /**
  * Fetches a JSON model list from the given URL with provider-aware timeouts, exponential backoff retries, and an overall time budget.
@@ -254,6 +278,11 @@ async function fetchModelsWithRetry(
 export async function listModels(provider: ProviderId, baseUrl: string, apiKey: string): Promise<string[]> {
   if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) {
     throw new Error('Custom provider requires a base URL')
+  }
+
+  const staticModels = STATIC_PROVIDER_MODELS[provider]
+  if (staticModels) {
+    return [...staticModels]
   }
 
   // Comment 3: Track start time for overall budget tracking
